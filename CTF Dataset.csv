@@ -1,0 +1,2318 @@
+Challenge ID,Challenge Name,Year,Category,Difficulty Level,CTF Event,Description,Solution Complexity,Hints Provided,Script/Code Provided,Code,Solution Methodology,Solution script,
+CTF001,Base Challenge,2023,Cryptography,Medium,CSAW-Finals,The challenge requires participants to find a specific number in a given base that satisfies a certain condition. The challenge involves understanding and manipulating base conversions and counters in Python.,"The solution requires understanding of base conversions, counters, and Python scripting.",,"chall.py: The challenge script, which asks the user to input a number in a specified base. solve.py: A Python script that calculates the required number based on the given base. solve1.py: A more advanced script that uses the pwn library to interact with the challenge remotely.","chall.py:  #!/usr/bin/python3
+import random
+from collections import defaultdict, Counter
+import sys
+
+def check(b, r):
+    dic = defaultdict(int)
+    for i in range(b):
+        dic[b-i-1] = r % b
+        r = r // b
+    count = Counter(dic.values())
+    count = defaultdict(int,count)
+    for i,j in dic.items():
+        if dic[i] != count[i]:
+            return False
+    return r == 0
+
+
+def main():
+    try:
+        with open(""flag.txt"", ""r"") as h:
+            flag = h.read()
+    except Exception:
+        print(""Sorry, There is something wrong with the chall..."")
+        return
+    b = random.randint(2000,15000)
+    r = input(f""Please find me a number that describes in base {b}\n\n>"")
+    try:
+        r = int(r)
+        if not check(b, r):
+            raise Exception
+    except Exception:
+        print(""You failed to impress me...\n"")
+        return
+
+    print(f""You have impressed me, have a flag: {flag}"")
+    return
+
+if __name__ == ""__main__"":
+    main()
+","The challenge can be solved by calculating a specific number in the given base that meets the criteria in the check function. The solution involves generating this number based on a formula, and then sending it back to the challenge script for verification.",,
+CTF002,TEA Image Decryption,2023,Cryptography,Hard,CSAW-Finals,"This challenge requires decrypting an encrypted image file using the TEA (Tiny Encryption Algorithm) in CBC mode. Participants must implement the decryption, brute-force the correct keys using multi-threaded processing, and compare the output against a corrupted reference image to recover the original image.","High (involves custom decryption code, brute-forcing keys, and parallel processing)",,"""TEA is a block cipher with a small key size, making it susceptible to brute-force attacks."" ""Utilize multi-threading to expedite the key search process.""",,Load the encrypted image and the corrupted reference image. Implement TEA decryption and TEA-CBC decryption functions.Utilize multi-threading to brute-force potential decryption keys.Compare the decrypted data with the reference image to identify the correct keys.Decrypt the entire image once the correct keys are found.,,
+CTF003,Delegate Wallet,2021,Crypto/Forensics,Intermediate,,"This challenge involves a simple TCP server that allows interaction with a pseudo-random number generator (PRNG) based on a Linear Congruential Generator (LCG). The server provides two main functionalities: generating a new wallet seed and guessing the next wallet seed to retrieve a flag. The PRNG is initialized with large random values for its parameters, making it difficult to predict future values without reverse-engineering or exploiting the PRNG's properties.",Medium to high. The challenge requires understanding the behavior of the PRNG and predicting future values based on its algorithm. This involves reverse-engineering the PRNG or exploiting weaknesses in its design.,"The PRNG is based on a Linear Congruential Generator (LCG).The state, multiplier, and increment values of the PRNG are all large random numbers.Understanding how LCGs work can help you predict future values.","The full Python script for the challenge is provided. It sets up a server using socketserver, runs a PRNG, and allows the user to interact with it by generating new seeds or guessing the next one.","import os
+import socketserver
+import string
+import threading
+from time import *
+import time
+import binascii
+import random
+
+flag = open(""flag.txt"", ""rb"").read().strip()
+
+class prng_lcg:
+
+    def __init__(self):
+        self.n = pow(2, 607) -1 
+        self.c = random.randint(2, self.n)
+        self.m = random.randint(2, self.n)
+        self.state = random.randint(2, self.n)
+
+    def next(self):
+        self.state = (self.state * self.m + self.c) % self.n
+        return self.state
+
+class Service(socketserver.BaseRequestHandler):
+
+    def handle(self):
+        RNG = prng_lcg()
+        while True:
+            self.send(""1) Generate a new wallet seed"")
+            self.send(""2) Guess the next wallet seed"")
+            choice = self.receive(""> "")
+            print(choice)
+            if choice == b'1':
+                self.send(str(RNG.next()))
+            elif choice == b'2':
+                guess = int(self.receive(""> "").decode())
+                if guess == RNG.next():
+                    self.send(flag)
+                else:
+                    self.send(""Nope!"")
+
+    def send(self, string, newline=True):
+        if type(string) is str:
+            string = string.encode(""utf-8"")
+
+        if newline:
+            string = string + b""\n""
+        self.request.sendall(string)
+
+    def receive(self, prompt=""> ""):
+        self.send(prompt, newline=False)
+        return self.request.recv(4096).strip()
+
+
+class ThreadedService(
+    socketserver.ThreadingMixIn,
+    socketserver.TCPServer,
+    socketserver.DatagramRequestHandler,
+):
+    pass
+
+
+def main():
+
+    port = 4008
+    host = ""0.0.0.0""
+
+    service = Service
+    server = ThreadedService((host, port), service)
+    server.allow_reuse_address = True
+
+    server_thread = threading.Thread(target=server.serve_forever)
+
+    server_thread.daemon = True
+    server_thread.start()
+
+    print(""Server started on "" + str(server.server_address) + ""!"")
+
+    # Now let the main thread just wait...
+    while True:
+        sleep(10)
+
+
+if __name__ == ""__main__"":
+    main()","Reverse Engineering the PRNG: Analyze the prng_lcg class to understand its behavior. The generator uses the formula:
+
+state=(state×𝑚+𝑐)modn
+where n, m, and c are large random values.
+
+State Recovery: To predict the next value, recover the PRNG state. Given enough outputs from the generator, you can solve for the internal state, m, and c.Predict Next Seed: Use the recovered state and PRNG parameters to compute the next value in the sequence.Automate the Process: Write a script to interact with the server, send guesses based on predicted values, and retrieve the flag.","import socket
+
+# Constants
+N = pow(2, 607) - 1
+
+def get_two_states(host, port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.connect((host, port))
+        
+        # Get the first state
+        s.recv(1024)  # Menu
+        s.sendall(b'1\n')  # Choose option 1
+        state1 = int(s.recv(1024).decode().strip())
+        
+        # Get the second state
+        s.recv(1024)  # Menu
+        s.sendall(b'1\n')  # Choose option 1
+        state2 = int(s.recv(1024).decode().strip())
+        
+    return state1, state2
+
+def crack_lcg(state1, state2):
+    # Given state1 = (state0 * m + c) % N
+    # and state2 = (state1 * m + c) % N
+    # We can solve for m and c
+
+    # First solve for m:
+    m = ((state2 - state1) * pow(state1 - state0, -1, N)) % N
+    
+    # Then solve for c:
+    c = (state1 - state0 * m) % N
+    
+    return m, c
+
+def predict_next_state(state, m, c):
+    return (state * m + c) % N
+
+def main():
+    host = ""example.com""  # Replace with the actual host
+    port = 4008  # Replace with the actual port
+    
+    state1, state2 = get_two_states(host, port)
+    
+    # Find m and c
+    m, c = crack_lcg(state1, state2)
+    
+    # Predict the next state
+    predicted_state = predict_next_state(state2, m, c)
+    
+    # Send the guess to the server
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.connect((host, port))
+        
+        s.recv(1024)  # Menu
+        s.sendall(b'2\n')  # Choose option 2
+        s.recv(1024)  # Prompt for the guess
+        s.sendall(f'{predicted_state}\n'.encode())  # Send the predicted state
+        
+        response = s.recv(1024).decode().strip()
+        print(f""Server response: {response}"")
+
+if __name__ == ""__main__"":
+    main()
+",
+CTF004,Soul Permutation Network,2021,Cryptography,Hard,,"This challenge involves a cryptographic scheme that encrypts 64-bit plaintext blocks using a custom substitution-permutation network (SPN). The encryption process includes multiple rounds of applying a substitution box (S-box), a permutation function, and a key XOR operation. The keys are derived from a secret key using a custom key expansion function. The objective is to reverse the encryption process or otherwise deduce the secret key by analyzing the provided plaintext-ciphertext pairs, allowing the recovery of the flag.","High. The challenge requires a deep understanding of SPN-based cryptographic schemes. The complexity arises from the non-standard S-box, permutation, and key schedule, which makes standard cryptanalysis techniques like differential cryptanalysis more challenging.","The encryption is based on a custom Substitution-Permutation Network (SPN).
+The key schedule repeats portions of the original key across multiple rounds.
+Analyze the output for patterns or weaknesses in the S-box and permutation.","The complete Python script for the challenge is provided. It sets up a server using socketserver, performs encryption on randomly generated plaintext blocks using the described SPN scheme, and outputs the plaintext-ciphertext pairs.","import os
+import socketserver
+import string
+import threading
+from time import *
+import time
+import binascii
+
+ROUNDS = 4
+BLOCK_SIZE = 8
+
+sbox = [237, 172, 175, 254, 173, 168, 187, 174, 53, 188, 165, 166, 161, 162, 131, 227, 191, 152, 63, 182, 169, 136, 171, 184, 149, 148, 183, 190, 181, 177, 163, 186, 207, 140, 143, 139, 147, 138, 155, 170, 134, 132, 135, 18, 193, 128, 129, 130, 157, 156, 151, 158, 153, 24, 154, 11, 141, 144, 21, 150, 146, 145, 179, 22, 245, 124, 236, 206, 105, 232, 43, 194, 229, 244, 247, 242, 233, 224, 235, 96, 253, 189, 219, 234, 241, 248, 251, 226, 117, 252, 213, 246, 240, 176, 249, 178, 205, 77, 231, 203, 137, 200, 107, 202, 133, 204, 228, 230, 225, 196, 195, 198, 201, 221, 199, 95, 216, 217, 159, 218, 209, 214, 215, 222, 83, 208, 211, 243, 44, 40, 46, 142, 32, 36, 185, 42, 45, 38, 47, 34, 33, 164, 167, 98, 41, 56, 55, 126, 57, 120, 59, 250, 37, 180, 119, 54, 52, 160, 51, 58, 5, 14, 79, 30, 8, 12, 13, 10, 68, 0, 39, 6, 1, 16, 3, 2, 23, 28, 29, 31, 27, 9, 7, 62, 4, 60, 19, 20, 48, 17, 87, 26, 239, 110, 111, 238, 109, 104, 35, 106, 101, 102, 103, 70, 49, 100, 99, 114, 61, 121, 223, 255, 88, 108, 123, 122, 84, 92, 125, 116, 112, 113, 115, 118, 197, 76, 15, 94, 73, 72, 75, 74, 81, 212, 69, 66, 65, 64, 97, 82, 93, 220, 71, 90, 25, 89, 91, 78, 85, 86, 127, 210, 80, 192, 67, 50]
+perm = [1, 57, 6, 31, 30, 7, 26, 45, 21, 19, 63, 48, 41, 2, 0, 3, 4, 15, 43, 16, 62, 49, 55, 53, 50, 25, 47, 32, 14, 38, 60, 13, 10, 23, 35, 36, 22, 52, 51, 28, 18, 39, 58, 42, 8, 20, 33, 27, 37, 11, 12, 56, 34, 29, 46, 24, 59, 54, 44, 5, 40, 9, 61, 17]
+key = open(""flag.txt"", ""rb"").read().strip()
+
+class Service(socketserver.BaseRequestHandler):
+
+    def key_expansion(self, key):
+        keys = [None] * 5
+        keys[0] = key[0:4] + key[8:12]
+        keys[1] = key[4:8] + key[12:16]
+        keys[2] = key[0:4] + key[8:12]
+        keys[3] = key[4:8] + key[12:16]
+        keys[4] = key[0:4] + key[8:12]
+        return keys
+
+    def apply_sbox(self, pt):
+        ct = b''
+        for byte in pt:
+            ct += bytes([sbox[byte]])
+        return ct
+
+    def apply_perm(self, pt):
+        pt = bin(int.from_bytes(pt, 'big'))[2:].zfill(64)
+        ct = [None] * 64
+        for i, c in enumerate(pt):
+            ct[perm[i]] = c
+        return bytes([int(''.join(ct[i : i + 8]), 2) for i in range(0, len(ct), 8)])
+
+    def apply_key(self, pt, key):
+        ct = b''
+        for a, b in zip(pt, key):
+            ct += bytes([a ^ b])
+        return ct
+
+    def handle(self):
+        keys = self.key_expansion(key)
+        for i in range(65536):
+            pt = os.urandom(8)
+            ct = pt
+            ct = self.apply_key(ct, keys[0])
+            for i in range(ROUNDS):
+                ct = self.apply_sbox(ct)
+                ct = self.apply_perm(ct)
+                ct = self.apply_key(ct, keys[i+1])
+            self.send(str((int.from_bytes(pt, 'big'), int.from_bytes(ct, 'big'))))
+
+    def send(self, string, newline=True):
+        if type(string) is str:
+            string = string.encode(""utf-8"")
+
+        if newline:
+            string = string + b""\n""
+        self.request.sendall(string)
+
+    def receive(self, prompt=""> ""):
+        self.send(prompt, newline=False)
+        return self.request.recv(4096).strip()
+
+
+class ThreadedService(
+    socketserver.ThreadingMixIn,
+    socketserver.TCPServer,
+    socketserver.DatagramRequestHandler,
+):
+    pass
+
+
+def main():
+
+    port = 4004
+    host = ""0.0.0.0""
+
+    service = Service
+    server = ThreadedService((host, port), service)
+    server.allow_reuse_address = True
+
+    server_thread = threading.Thread(target=server.serve_forever)
+
+    server_thread.daemon = True
+    server_thread.start()
+
+    print(""Server started on "" + str(server.server_address) + ""!"")
+
+    # Now let the main thread just wait...
+    while True:
+        sleep(10)
+
+
+if __name__ == ""__main__"":
+    main()","Understanding the SPN Structure: The SPN consists of 4 rounds, each involving an S-box substitution, permutation, and key addition step. The key schedule is simple and repetitive, which might introduce vulnerabilities.
+
+Differential Cryptanalysis: Given the simplicity and repetition in the key schedule, differential cryptanalysis could be applied to recover key bits by analyzing how small differences in the plaintext propagate through the network to affect the ciphertext.
+
+Key Recovery: Once sufficient key bits are recovered, use them to decrypt the ciphertext and retrieve the flag.","import socket
+import struct
+
+ROUNDS = 4
+BLOCK_SIZE = 8
+
+# S-box and Permutation from the server code
+sbox = [237, 172, 175, 254, 173, 168, 187, 174, 53, 188, 165, 166, 161, 162, 131, 227, 191, 152, 63, 182, 169, 136, 171, 184, 149, 148, 183, 190, 181, 177, 163, 186, 207, 140, 143, 139, 147, 138, 155, 170, 134, 132, 135, 18, 193, 128, 129, 130, 157, 156, 151, 158, 153, 24, 154, 11, 141, 144, 21, 150, 146, 145, 179, 22, 245, 124, 236, 206, 105, 232, 43, 194, 229, 244, 247, 242, 233, 224, 235, 96, 253, 189, 219, 234, 241, 248, 251, 226, 117, 252, 213, 246, 240, 176, 249, 178, 205, 77, 231, 203, 137, 200, 107, 202, 133, 204, 228, 230, 225, 196, 195, 198, 201, 221, 199, 95, 216, 217, 159, 218, 209, 214, 215, 222, 83, 208, 211, 243, 44, 40, 46, 142, 32, 36, 185, 42, 45, 38, 47, 34, 33, 164, 167, 98, 41, 56, 55, 126, 57, 120, 59, 250, 37, 180, 119, 54, 52, 160, 51, 58, 5, 14, 79, 30, 8, 12, 13, 10, 68, 0, 39, 6, 1, 16, 3, 2, 23, 28, 29, 31, 27, 9, 7, 62, 4, 60, 19, 20, 48, 17, 87, 26, 239, 110, 111, 238, 109, 104, 35, 106, 101, 102, 103, 70, 49, 100, 99, 114, 61, 121, 223, 255, 88, 108, 123, 122, 84, 92, 125, 116, 112, 113, 115, 118, 197, 76, 15, 94, 73, 72, 75, 74, 81, 212, 69, 66, 65, 64, 97, 82, 93, 220, 71, 90, 25, 89, 91, 78, 85, 86, 127, 210, 80, 192, 67, 50]
+perm = [1, 57, 6, 31, 30, 7, 26, 45, 21, 19, 63, 48, 41, 2, 0, 3, 4, 15, 43, 16, 62, 49, 55, 53, 50, 25, 47, 32, 14, 38, 60, 13, 10, 23, 35, 36, 22, 52, 51, 28, 18, 39, 58, 42, 8, 20, 33, 27, 37, 11, 12, 56, 34, 29, 46, 24, 59, 54, 44, 5, 40, 9, 61, 17]
+
+# Inverse S-box
+inverse_sbox = [0] * 256
+for i in range(256):
+    inverse_sbox[sbox[i]] = i
+
+# Inverse permutation
+inverse_perm = [0] * 64
+for i in range(64):
+    inverse_perm[perm[i]] = i
+
+# Connect to the server and receive some plaintext-ciphertext pairs
+def get_plaintext_ciphertext_pairs(host, port, num_pairs=10):
+    pairs = []
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.connect((host, port))
+        for _ in range(num_pairs):
+            data = s.recv(4096).decode().strip()
+            pt, ct = map(int, data[1:-1].split(', '))
+            pairs.append((pt, ct))
+    return pairs
+
+# Reverse permutation
+def reverse_permutation(ct):
+    bin_ct = bin(ct)[2:].zfill(64)
+    reversed_bin = ''.join(bin_ct[inverse_perm[i]] for i in range(64))
+    return int(reversed_bin, 2)
+
+# Reverse S-box
+def reverse_sbox(ct):
+    return int.from_bytes(bytes([inverse_sbox[b] for b in ct]), 'big')
+
+# XOR with key
+def xor_with_key(ct, key):
+    return int.from_bytes(bytes([a ^ b for a, b in zip(ct, key)]), 'big')
+
+# Decrypt function
+def decrypt(ct, keys):
+    ct = xor_with_key(ct, keys[4])
+    for i in range(ROUNDS - 1, -1, -1):
+        ct = reverse_permutation(ct)
+        ct = reverse_sbox(ct.to_bytes(BLOCK_SIZE, 'big'))
+        ct = xor_with_key(ct, keys[i])
+    return ct
+
+# Get plaintext-ciphertext pairs
+pairs = get_plaintext_ciphertext_pairs(""example.com"", 4004)  # Replace with the actual server details
+
+# Use the pairs to find the keys and decrypt the flag
+keys = [None] * 5  # Placeholder for the keys, which you will determine
+# You can try brute-forcing the keys or use the pairs to deduce them
+# Once you have the keys, use them to decrypt the flag
+
+for pt, ct in pairs:
+    decrypted_pt = decrypt(ct, keys)
+    print(f""Plaintext: {pt}, Decrypted: {decrypted_pt}"")
+",
+CTF005,Factorize Me,2021,Cryptography,Intermediate to Hard,,"This challenge involves RSA encryption, where a message (the flag) is encrypted using a public key consisting of a modulus n and a public exponent e. The modulus n is the product of two large prime numbers p and q, generated by a custom prime generation function. The objective is to recover the flag by factorizing the modulus n and obtaining the private key.","High. The complexity stems from the difficulty of factorizing a 2048-bit RSA modulus, which typically requires advanced techniques or exploiting weaknesses in the prime generation process.","The primes p and q are generated in a non-standard way, which might introduce vulnerabilities.The modulus n is 2048 bits long, meaning each prime is approximately 1024 bits.Consider the structure of the prime generation process when attempting to factorize n.","The complete Python script for the challenge is provided. It reads a flag, converts it to a large integer m, generates two large primes p and q, computes the RSA modulus n, and prints the ciphertext c obtained by encrypting m with the public key (e,n).","mport binascii
+import random
+from Crypto.Util.number import isPrime
+
+flag = open(""flag.txt"", ""rb"").read().strip()
+m = int(binascii.hexlify(flag), 16)
+
+def genPrimes(size):
+    base = random.getrandbits(size // 2) << size // 2
+    base = base | (1 << 1023) | (1 << 1022) | 1
+    while True:
+        temp = base | random.getrandbits(size // 2)
+        if isPrime(temp):
+            p = temp
+            break
+    while True:
+        temp = base | random.getrandbits(size // 2)
+        if isPrime(temp):
+            q = temp
+            break
+    return (p, q)
+
+p, q = genPrimes(1024)
+n = p * q
+e = 0x10001
+
+print(""c:"", pow(m, e, n))",,"import binascii
+from sympy import mod_inverse
+from Crypto.Util.number import long_to_bytes
+
+# Given values from the challenge
+n =  # Replace with the actual modulus n from the output
+c =  # Replace with the actual ciphertext c from the output
+e = 0x10001  # The public exponent
+
+# Step 1: Factorize n to find p and q
+# This step assumes you have factorized n manually or using an online tool.
+p =  # Replace with the actual factor p
+q =  # Replace with the actual factor q
+
+# Step 2: Calculate φ(n)
+phi_n = (p - 1) * (q - 1)
+
+# Step 3: Calculate the private key d
+d = mod_inverse(e, phi_n)
+
+# Step 4: Decrypt the ciphertext
+m = pow(c, d, n)
+
+# Convert the integer message back to bytes and print the flag
+flag = long_to_bytes(m).decode('utf-8')
+print(""Flag:"", flag)
+",
+CTF006,Staple-AES,2021,Cryptography,Hard,,"The challenge involves a custom AES-based encryption service that shuffles the plaintext blocks and encrypts them using a mode similar to CBC, but with a fixed IV and shuffling of blocks before encryption. The objective is to reverse the encryption process and retrieve the flag.","High: The challenge requires understanding of AES encryption, block cipher modes, and the ability to deal with the shuffling of blocks. It also involves some guesswork or brute-forcing due to the nature of the shuffling.","None provided directly, but the code implies the challenge is about reversing the block shuffle and decryption.","Yes, the encryption code is provided.","import os
+import socketserver
+import string
+import threading
+from time import *
+import random
+import time
+import binascii
+
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad
+
+iv = b''
+key = b''
+flag = open(""flag.txt"", ""rb"").read().strip()
+
+class Service(socketserver.BaseRequestHandler):
+
+    def handle(self):
+        assert len(flag) % 16 == 1
+        blocks = self.shuffle(flag)
+        ct = self.encrypt(blocks)
+        self.send(binascii.hexlify(ct))
+
+    def byte_xor(self, ba1, ba2):
+        return bytes([_a ^ _b for _a, _b in zip(ba1, ba2)])
+
+    def encrypt(self, blocks):
+        curr = iv
+        ct = []
+        cipher = AES.new(key, AES.MODE_ECB)
+        for block in blocks:
+            curr = cipher.encrypt(curr)
+            ct.append(self.byte_xor(block, curr))
+        return b''.join(ct)
+
+    def shuffle(self, pt):
+        pt = pad(pt, 16)
+        pt = [pt[i: i + 16] for i in range(0, len(pt), 16)]
+        random.shuffle(pt)
+        return pt
+
+    def send(self, string, newline=True):
+        if type(string) is str:
+            string = string.encode(""utf-8"")
+
+        if newline:
+            string = string + b""\n""
+        self.request.sendall(string)
+
+    def receive(self, prompt=""> ""):
+        self.send(prompt, newline=False)
+        return self.request.recv(4096).strip()
+
+
+class ThreadedService(
+    socketserver.ThreadingMixIn,
+    socketserver.TCPServer,
+    socketserver.DatagramRequestHandler,
+):
+    pass
+
+
+def main():
+
+    port = 3167
+    host = ""0.0.0.0""
+
+    service = Service
+    server = ThreadedService((host, port), service)
+    server.allow_reuse_address = True
+
+    server_thread = threading.Thread(target=server.serve_forever)
+
+    server_thread.daemon = True
+    server_thread.start()
+
+    print(""Server started on "" + str(server.server_address) + ""!"")
+
+    # Now let the main thread just wait...
+    while True:
+        sleep(10)
+
+
+if __name__ == ""__main__"":
+    main()","Step 1: Analyze the encryption process: The service encrypts using AES in ECB mode but first shuffles the blocks of the padded plaintext.
+Step 2: Understand that reversing the shuffle is key to retrieving the original plaintext.
+Step 3: Utilize the properties of ECB mode, where identical plaintext blocks will result in identical ciphertext blocks (ignoring the XOR step for now).
+Step 4: Reverse the XOR operation using the known iv and deduce the order of blocks.
+Step 5: Combine the blocks back in the correct order to retrieve the original flag.","import binascii
+from Crypto.Cipher import AES
+
+# Constants (as extracted from the service, you would need to determine these)
+iv = b'' # You need to determine this
+key = b'' # You need to determine this
+
+def decrypt(ct):
+    # Initialize cipher
+    cipher = AES.new(key, AES.MODE_ECB)
+    
+    # Break ct into blocks of 16 bytes
+    blocks = [ct[i: i + 16] for i in range(0, len(ct), 16)]
+    
+    # Decrypt each block (reverse the shuffling)
+    decrypted_blocks = []
+    prev_ct = iv
+    for block in blocks:
+        decrypted_block = cipher.encrypt(prev_ct)
+        decrypted_blocks.append(byte_xor(block, decrypted_block))
+        prev_ct = decrypted_block
+    
+    # Reverse the shuffle manually or algorithmically
+    decrypted_blocks = reverse_shuffle(decrypted_blocks)
+    
+    # Join the blocks to form the final plaintext
+    pt = b''.join(decrypted_blocks)
+    return pt
+
+def byte_xor(ba1, ba2):
+    return bytes([_a ^ _b for _a, _b in zip(ba1, ba2)])
+
+def reverse_shuffle(blocks):
+    # Implement logic to reverse the shuffle
+    # If the shuffle algorithm is known or guessable, apply it here
+    # This is an example, and would be more complex in a real scenario
+    return sorted(blocks) # Placeholder
+
+if __name__ == ""__main__"":
+    # Example: hex ciphertext from the challenge
+    ct_hex = '...' # Replace with actual hex output from the service
+    ct = binascii.unhexlify(ct_hex)
+    
+    # Decrypt
+    pt = decrypt(ct)
+    
+    # Print the plaintext
+    print(""Decrypted flag:"", pt)
+",
+CTF007,L4ugh,2024,Cryptography,Very hard,,"The challenge involves interacting with a Python-based RSA encryption service that uses custom RSA keys derived from a seed string related to the number ""666"". The participant must manipulate the given d_evil and d_good parts of a private key to successfully execute RSA operations and possibly AES decryption to eventually retrieve the flag.","High: The solution involves understanding and manipulating custom RSA encryption based on the given seed, understanding key splitting techniques, and overcoming multiple layers of encryption (AES and RSA) to retrieve the flag.","The seed value ""It's (666) the work of the devil..."" is crucial for understanding how d_evil and d_good are generated.","Yes, both the challenge and utility scripts are provided.","Crypto.Util.number import *
+from utils import * 
+
+Flag = '0xL4ugh{Fak3_Fl@g}'
+key = os.urandom(16)
+x = random.randint(2**10, 2**20)
+seed = ""It's (666) the work of the devil...""
+print(seed)
+d = evilRSA(seed)
+d_evil = d >> (int(seed[6:9])//2)
+d_good = d %  pow(2,int(seed[6:9])//2)
+z='''1.d_evil
+2.d_good
+3.pass d to get to sec part
+Ex : {""option"":""1""}
+d=d_evil+d_good
+'''
+print('all input data is in json')
+print(z)
+
+w='''1.get your token
+2.sign in'''
+while True:
+    test = json.loads(input('option:\t'))
+    if test['option'] == ""1"": 
+        Ns,es = RsaGen(d_evil)
+        print(f'Ns={Ns}')
+        print(f'es={es}')
+
+    if test['option'] == ""2"":
+        res = getrand(d_good)
+        print(f'RAND = {res}')
+
+    if test['option'] == ""3"":
+    # check = int(input('Enter the secret key to access admin privileges:\t'))
+        if int(test['d']) != d: 
+            print(""you need to provide d to continue"")
+            exit()
+        elif int(test['d']) == d:
+        
+            z = json.loads(input(w))
+            if z['option'] == '1':
+                user = z['user']
+                
+                data = {""id"": x, ""isadmin"": False, ""username"": user}
+                print(data)
+                try:
+                    pt = json.dumps(data)
+                    ct = encrypt(pt)
+                    print(ct)
+                except json.JSONDecodeError as e:
+                    print(f""Error decoding JSON: {e}"")
+                x += x
+            elif z['option'] == '2':
+                token = z['token']
+                dec = decrypt(token)
+                if dec is not None:
+                    print(""Decrypted plaintext:"", dec)
+                else:
+                    print(""Decryption failed. cant decrypt :"",dec) 
+                    continue    
+                flag(dec)
+            
+
+
+main() 
+and utils.py from Crypto.Util.number import * 
+from Crypto.Util.Padding import pad, unpad
+from Crypto.Cipher import AES
+import os
+import random
+import json
+key = os.urandom(16)
+Flag = '0xL4ugh{Fak3_Fl@g}'
+max_retries=19
+def evilRSA(seed):
+    d = 1 
+    while d.bit_length() != int(seed[6:9]): 
+        d = getPrime(int(seed[6:9]))
+        while not isPrime(d>>333):
+            d = getPrime(int(seed[6:9]))
+    return d 
+
+def RsaGen(d):
+    for _ in range(max_retries):
+        try:
+            Ns, es = [], []
+            for evilChar in '666':
+                p = getPrime(512)
+                q = getPrime(512)
+                phi = (p - 1) * (q - 1)
+                e = inverse(d, phi)
+                Ns.append(p * q)
+                es.append(e)
+            
+            return Ns, es
+        except ValueError as e:
+            # Ignore the error and continue the loop
+            pass
+
+def getrand(good):
+    user_input = int(input(""Enter your payload:\t""))
+    if user_input.bit_length() > (666//2): 
+        print(""MEH"")
+        return 
+    return [good*user_input + getPrime(666//2) for i in range(10)]
+
+def encrypt(pt):
+    IV = os.urandom(16)
+    cipher = AES.new(key, AES.MODE_CBC, IV)
+    encrypted = cipher.encrypt(pad(pt.encode(), 16))
+    return IV.hex() + encrypted.hex()
+
+def decrypt(ct):
+    try:
+        IV = bytes.fromhex(ct[:32])
+        cipher = AES.new(key, AES.MODE_CBC, IV)
+        decrypted = cipher.decrypt(bytes.fromhex(ct[32:]))
+    except ValueError as decryption_error:
+        print(""AES Decryption Error:"", decryption_error)
+        return None
+
+    try:
+        plaintext = unpad(decrypted, 16).decode()
+    except ValueError as unpadding_error:
+        print(""Unpadding Error:"", decrypted)
+        return None
+
+    return plaintext
+
+def flag(data):
+    data=json.loads(data)
+    print('1. Get Flag')
+    print('2.Exit')
+    while True:
+        print('1. Get Flag')
+        print('2.Exit')
+        z = json.loads(input())
+        if z['option'] == '1':
+            if isinstance(data, dict) and data['isadmin'] == True:
+                print(Flag)
+            else:
+                print('Try another time')
+        elif z['option'] == '2':
+            return","Step 1: Analyze the evilRSA function, which generates the private key d based on the seed ""666"".
+Step 2: Use the RsaGen(d_evil) function to generate the modulus (Ns) and exponent (es) based on d_evil.
+Step 3: Manipulate the getrand(d_good) function to generate the correct random values that align with the RSA operations.
+Step 4: Combine d_evil and d_good to form the complete d and use this to correctly sign in as an admin.
+Step 5: Successfully execute AES decryption and trigger the flag() function by ensuring the isadmin flag is set to True in the decrypted data.",,"from Crypto.Util.number import *
+from utils import *
+
+# Seed and derived private key parts
+seed = ""It's (666) the work of the devil...""
+d = evilRSA(seed)
+d_evil = d >> (int(seed[6:9])//2)
+d_good = d % pow(2, int(seed[6:9])//2)
+
+# Step 1: Generate RSA parameters using d_evil
+Ns, es = RsaGen(d_evil)
+print(""Generated Ns:"", Ns)
+print(""Generated es:"", es)
+
+# Step 2: Attempt to use d_good to generate random values
+random_values = getrand(d_good)
+print(""Generated Random Values:"", random_values)
+
+# Step 3: Attempt to login as admin and decrypt
+user = ""admin""
+data = {""id"": 1, ""isadmin"": True, ""username"": user}
+pt = json.dumps(data)
+ct = encrypt(pt)
+print(""Encrypted Token:"", ct)
+
+# Step 4: Decrypt the token to verify admin privileges
+dec = decrypt(ct)
+print(""Decrypted Token:"", dec)
+
+# If the decrypted data indicates admin access, retrieve the flag
+if dec:
+    flag(dec)
+"
+CTF008,RSA GCD,2024,Cryptography,Medium,,The challenge involves breaking an RSA encryption scheme where the modulus n is the product of two primes p and q. The challenge provides a ciphertext encrypted with a public exponent derived from a GCD-related equation. The goal is to recover the plaintext by solving the given equations and decrypting the provided ciphertext.,"Intermediate to Advanced
+Requires understanding of RSA encryption, modular arithmetic, and the ability to solve equations involving large numbers.
+","The eq1 value is derived from out1 which is an RSA exponentiation result. Understanding the relationship between out1 and out2 can help in deducing the private key or factors of the modulus.
+Use the provided values to solve the modular equations and recover the plaintext.","Challenge Script (RSA_GCD): Script that generates the RSA parameters and writes the challenge data to a file.
+Challenge Data (chall2.txt): Contains the key parameters and ciphertext necessary for solving the challenge.","import math
+from Crypto.Util.number import *
+from secret import flag, p, q
+from gmpy2 import next_prime
+
+m = bytes_to_long(flag.encode())
+n = p * q
+
+power1 = getPrime(128)
+power2 = getPrime(128)
+out1 = pow((p + 5 * q), power1, n)
+out2 = pow((2 * p - 3 * q), power2, n)
+eq1 = next_prime(out1)
+
+c = pow(m, eq1, n)
+
+with open('chall2.txt', 'w') as f:
+    f.write(f""power1={power1}\npower2={power2}\neq1={eq1}\nout2={out2}\nc={c}\nn={n}"")
+","Understand the Provided Values:
+
+power1, power2, eq1, out2, c, and n are provided. Use these values to understand the RSA encryption scheme.
+Derive RSA Parameters:
+
+Use the given power1 and power2 to understand how they relate to the encryption and modular operations.
+eq1 is derived from out1, which can help in finding the private key.
+Solve for the Private Key:
+
+Use the GCD or modular arithmetic techniques to solve for p and q given the relations in the problem.
+Decrypt the Ciphertext:
+
+Once the private key is recovered, use it to decrypt c and obtain the plaintext message.","from sympy import *
+from Crypto.Util.number import *
+import gmpy2
+
+# Read the challenge data
+with open('chall2.txt', 'r') as f:
+    data = f.read()
+
+# Extract the values
+exec(data)
+
+# Define the modular equation solving
+def gcd(a, b):
+    while b:
+        a, b = b, a % b
+    return a
+
+# Compute the greatest common divisor to find potential factors of n
+gcd_val = gcd(out2, n)
+print(f""Possible factor of n: {gcd_val}"")
+
+# Compute the other factor
+other_factor = n // gcd_val
+print(f""Other factor of n: {other_factor}"")
+
+# Factorization of n
+p, q = gcd_val, other_factor
+
+# Calculate the modular inverse of eq1
+phi = (p - 1) * (q - 1)
+d = inverse(eq1, phi)
+
+# Decrypt the ciphertext
+m = pow(c, d, n)
+plaintext = long_to_bytes(m)
+print(""Recovered plaintext:"", plaintext.decode())
+",
+CTF009,Git Meow,2024,Web Security / Command Injection,Medium,,"The challenge involves entering Git commands that will be executed by a Python script. The script performs validation on the commands to ensure they do not contain certain blacklisted characters or patterns. Commands are executed, and if a specific string (""{f4k3_fl4g_f0r_n00b5}"") is found in the output, the program will exit with a specific message. The goal is to bypass the validation and extract the hidden flag without triggering the security checks.","Intermediate
+Requires understanding of command injection and bypassing input validation.","The script has a blacklist of characters and patterns that can trigger the security checks. Crafting input to avoid these checks while achieving the desired outcome is crucial.
+Look for ways to inject commands or manipulate the input to reveal the hidden flag.",,"import os
+from banner import monkey
+
+BLACKLIST = [""|"", ""\"""", ""'"", "";"", ""$"", ""\\"", ""#"", ""*"", ""("", "")"", ""&"", ""^"", ""@"", ""!"", ""<"", "">"", ""%"", "":"", "","", ""?"", ""{"", ""}"", ""`"",""diff"",""/dev/null"",""patch"",""./"",""alias"",""push""]
+
+def is_valid_utf8(text):
+    try:
+        text.encode('utf-8').decode('utf-8')
+        return True
+    except UnicodeDecodeError:
+        return False
+
+def get_git_commands():
+    commands = []
+    print(""Enter git commands (Enter an empty line to end):"")
+    while True:
+        try:
+            user_input = input("""")
+        except (EOFError, KeyboardInterrupt):
+            break
+
+        if not user_input:
+            break
+
+        if not is_valid_utf8(user_input):
+            print(monkey)
+            exit(1337)
+
+        for command in user_input.split("" ""):
+            for blacklist in BLACKLIST:
+                if blacklist in command:
+                    print(monkey)
+                    exit(1337)
+            
+
+        commands.append(""git "" + user_input)
+
+    return commands
+
+def execute_git_commands(commands):
+    for command in commands:
+        output = os.popen(command).read()
+        if ""{f4k3_fl4g_f0r_n00b5}"" in output:
+            print(monkey)
+            exit(1337)
+        else:
+            print(output)
+            
+
+
+commands = get_git_commands()
+execute_git_commands(commands)
+","Understand the Blacklist and Input Validation:
+
+The script checks user input against a blacklist of forbidden characters and patterns. Commands containing any of these will cause the script to exit.
+Craft Valid Input:
+
+Commands should avoid blacklisted characters. Consider using command variations that do not trigger the blacklist while still achieving the intended result.
+Find and Extract the Flag:
+
+The flag is indicated by the string ""{f4k3_fl4g_f0r_n00b5}"". Commands should be crafted to reveal this string without being filtered out by the blacklist.","Since the challenge involves interacting with a live system, the solution will primarily involve crafting and testing commands rather than writing a fixed script. However, you might test different Git commands and monitor their outputs for the hidden flag.
+
+To further explore, use variations of Git commands that avoid blacklisted patterns and check outputs carefully. For example, testing git ls-remote, git rev-list, or other Git commands might help you uncover the flag if it's hidden in the command outputs.",
+CTF010,Library,2024,Exploitation / File Handling,Medium,,"This challenge is a library management system implemented in Python, which allows users to manage books, members, and file operations. The system includes functionalities to add books and members, display books, search for books, check out and return books, save books, and check for file presence in the directory.
+The system uses various classes to represent books, members, and book copies. The SaveFile class can save books to files with names based on the current date and time.
+There are security considerations in handling file names and user inputs, which may lead to potential vulnerabilities such as command injection or improper file handling.","Intermediate to Advanced
+
+Requires knowledge of class-based programming, input validation, and file handling. Vulnerabilities could include command injection or path traversal.",The challenge involves dealing with file names and system commands. Look for ways to manipulate file names or commands to gain access to sensitive information or achieve unintended results.,,"#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+from rich.console import Console
+import re
+import shlex
+import os
+
+FLAG = os.getenv(""FLAG"", ""FAKE_FLAG"") 
+
+console = Console()
+
+class Member:
+    def __init__(self, name):
+        self.name = name
+
+class Book:
+    def __init__(self, title, author, isbn):
+        self.title = title
+        self.author = author
+        self.isbn = isbn
+
+class BookCopy:
+    def __init__(self, book):
+        self.book = book
+        self.available = True
+
+class SaveFile:
+    def __init__(self, file_name=os.urandom(16).hex()):
+        self.file = file_name
+
+class Library:
+    def __init__(self, name):
+        self.name = name
+        self.books = {}
+        self.members = {}
+
+    def add_book(self, book, num_copies=1):
+        if book.isbn in self.books:
+            self.books[book.isbn] += num_copies
+        else:
+            self.books[book.isbn] = num_copies
+
+    def add_member(self, member):
+        self.members[member.name] = member
+
+    def display_books(self, title=''):
+        if title:
+            for isbn, num_copies in self.books.items():
+                book = isbn_to_book[isbn]
+                if book.title == title:
+                    return book.title
+            console.print(""\n[bold red]Book not found.[/bold red]"")
+        else:
+            console.print(f""\n[bold green]Books in {self.name} Library:[/bold green]"")
+            for isbn, num_copies in self.books.items():
+                book = isbn_to_book[isbn]
+                status = f""{num_copies} copies available"" if num_copies > 0 else ""All copies checked out""
+                console.print(f""[cyan]ISBN: {isbn} - Status: {status}[/cyan]"")
+
+    def search_book(self):
+        pattern = console.input(""[bold blue]Enter the pattern to search: [/bold blue]"")
+        matching_books = []
+        for isbn, num_copies in self.books.items():
+            book = isbn_to_book[isbn]
+            if re.fullmatch(pattern, book.title):
+                matching_books.append(book)
+
+        if matching_books:
+            console.print(f""\n[bold yellow]Found matching books for '{pattern}':[bold yellow]"")
+            for book in matching_books:
+                status = f""{num_copies} copies available"" if num_copies > 0 else ""All copies checked out""
+                console.print(f""[cyan]ISBN: {book.isbn} - Status: {status}[/cyan]"")
+        else:
+            console.print(f""[bold yellow]No matching books found for '{pattern}'.[/bold yellow]"")
+
+    def check_out_book(self, isbn, member_name):
+        if member_name not in self.members:
+            console.print(f""\n[bold red]Member '{member_name}' not found.[/bold red]"")
+            return
+
+        if isbn not in isbn_to_book:
+            console.print(""\n[bold red]Book not found.[/bold red]"")
+            return
+
+        if isbn not in self.books or self.books[isbn] <= 0:
+            console.print(""\n[bold red]All copies of the book are currently checked out.[/bold red]"")
+            return
+
+        member = self.members[member_name]
+        book_copy = BookCopy(isbn_to_book[isbn])
+
+        for i in range(len(member_books.setdefault(member_name, []))):
+            if member_books[member_name][i].book.isbn == isbn and member_books[member_name][i].available:
+                member_books[member_name][i] = book_copy
+                self.books[isbn] -= 1
+                console.print(f""\n[bold green]Successfully checked out:[/bold green] [cyan]{book_copy.book} for {member.name}[/cyan]"")
+                return
+
+        console.print(""\n[bold red]No available copies of the book for checkout.[/bold red]"")
+
+    def return_book(self, isbn, member_name):
+        if member_name not in self.members:
+            console.print(f""\n[bold red]Member '{member_name}' not found.[/bold red]"")
+            return
+
+        if isbn not in isbn_to_book:
+            console.print(""\n[bold red]Book not found.[/bold red]"")
+            return
+
+        member = self.members[member_name]
+
+        for i in range(len(member_books.setdefault(member_name, []))):
+            if member_books[member_name][i].book.isbn == isbn and not member_books[member_name][i].available:
+                member_books[member_name][i].available = True
+                self.books[isbn] += 1
+                console.print(f""\n[bold green]Successfully returned:[/bold green] [cyan]{member_books[member_name][i].book} by {member.name}[/cyan]"")
+                return
+
+        console.print(""\n[bold red]Book not checked out to the member or already returned.[/bold red]"")
+
+def save_book(title, content='zAbuQasem'):
+    try:
+        with open(title, 'w') as file:
+            file.write(content)
+        console.print(f""[bold green]Book saved successfully[/bold green]"")
+    except Exception as e:
+        console.print(f""[bold red]Error: {e}[/bold red]"")
+
+def check_file_presence():
+    book_name = shlex.quote(console.input(""[bold blue]Enter the name of the book (file) to check:[/bold blue] ""))
+    command = ""ls "" + book_name
+
+    try:
+        result = os.popen(command).read().strip()
+        print(result)
+        if result == book_name:
+            console.print(f""[bold green]The book is present in the current directory.[/bold green]"")
+        else:
+            console.print(f""[bold red]The book is not found in the current directory.[/bold red]"")
+    except Exception as e:
+        console.print(f""[bold red]Error: {e}[/bold red]"")
+
+if __name__ == ""__main__"":
+    library = Library(""My Library"")
+    isbn_to_book = {}
+    member_books = {}
+    while True:
+        console.print(""\n[bold blue]Library Management System[/bold blue]"")
+        console.print(""1. Add Member"")
+        console.print(""2. Add Book"")
+        console.print(""3. Display Books"")
+        console.print(""4. Search Book"")
+        console.print(""5. Check Out Book"")
+        console.print(""6. Return Book"")
+        console.print(""7. Save Book"")
+        console.print(""8. Check File Presence"")
+        console.print(""0. Exit"")
+
+        choice = console.input(""[bold blue]Enter your choice (0-8): [/bold blue]"")
+
+        if choice == ""0"":
+            console.print(""[bold blue]Exiting Library Management System. Goodbye![/bold blue]"")
+            break
+        elif choice == ""1"":
+            member_name = console.input(""[bold blue]Enter member name: [/bold blue]"")
+            library.add_member(Member(member_name))
+            console.print(f""[bold green]Member '{member_name}' added successfully.[/bold green]"")
+        elif choice == ""2"":
+            title = console.input(""[bold blue]Enter book title: [/bold blue]"").strip()
+            author = console.input(""[bold blue]Enter book author: [/bold blue]"")
+            isbn = console.input(""[bold blue]Enter book ISBN: [/bold blue]"")
+            num_copies = int(console.input(""[bold blue]Enter number of copies: [/bold blue]""))
+            book = Book(title, author, isbn)
+            isbn_to_book[isbn] = book
+            library.add_book(book, num_copies)
+            console.print(f""[bold green]Book '{title}' added successfully with {num_copies} copies.[/bold green]"")
+        elif choice == ""3"":
+            library.display_books()
+        elif choice == ""4"":
+            library.search_book()
+        elif choice == ""5"":
+            isbn = console.input(""[bold blue]Enter ISBN of the book: [/bold blue]"")
+            member_name = console.input(""[bold blue]Enter member name: [/bold blue]"")
+            library.check_out_book(isbn, member_name)
+        elif choice == ""6"":
+            isbn = console.input(""[bold blue]Enter ISBN of the book: [/bold blue]"")
+            member_name = console.input(""[bold blue]Enter member name: [/bold blue]"")
+            library.return_book(isbn, member_name)
+        elif choice == ""7"":
+            choice = console.input(""\n[bold blue]Book Manager:[/bold blue]\n1. Save Existing\n2. Create new book\n[bold blue]Enter your choice (1-2): [/bold blue]"")
+            if choice == ""1"":
+                title = console.input(""[bold blue]Enter Book title to save: [/bold blue]"").strip()
+                file = SaveFile(library.display_books(title=title))
+                save_book(file.file, content=""Hello World"")
+            else:
+                save_file = SaveFile()
+                title = console.input(""[bold blue]Enter book title: [/bold blue]"").strip()
+                author = console.input(""[bold blue]Enter book author: [/bold blue]"")
+                isbn = console.input(""[bold blue]Enter book ISBN: [/bold blue]"")
+                num_copies = int(console.input(""[bold blue]Enter number of copies: [/bold blue]""))
+                title = title.format(file=save_file)
+                book = Book(title, author, isbn)
+                isbn_to_book[isbn] = book
+                library.add_book(book, num_copies)
+                save_book(title)
+        elif choice == ""8"":
+            check_file_presence()
+        else:
+            console.print(""[bold red]Invalid choice. Please enter a number between 0 and 8.[/bold red]"")
+","The primary focus in this challenge is to exploit the command injection vulnerability. By providing carefully crafted inputs, you can bypass security controls and reveal sensitive information like the FLAG. Make sure to handle this with caution and ensure you’re operating within the intended scope of the challenge.",,
+CTF011,Truth or Lies,2022,Web Security / Command Injection,Intermediate,1337UP,"A web application with several routes. One route appears to handle user input, filtering certain characters to prevent exploitation. The application uses Flask and contains multiple routes with different input handling mechanisms.",Medium,The routes have specific input handling mechanisms and filters. Testing different inputs and bypassing filters might be required.,Yes,"from flask import Flask, request, render_template_string, render_template
+
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return render_template('index.html')
+
+@app.route(""""""/
+             ''''''                                                                                                                                                          bbbbbbbb                                           
+1111111    '::::'                             VVVVVVVV           VVVVVVVV                 lllllll                   333333333333333                              444444444 b::::::b              1111111    333333333333333   
+1::::::1    '::::'                             V::::::V           V::::::V                 l:::::l                  3:::::::::::::::33                           4::::::::4 b::::::b             1::::::1   3:::::::::::::::33 
+1:::::::1    ':::''                             V::::::V           V::::::V                 l:::::l                  3::::::33333::::::3                         4:::::::::4 b::::::b            1:::::::1   3::::::33333::::::3
+111:::::1   ':::'                               V::::::V           V::::::V                 l:::::l                  3333333     3:::::3                        4::::44::::4  b:::::b            111:::::1   3333333     3:::::3
+   1::::1   ''''      mmmmmmm    mmmmmmm         V:::::V           V:::::Vuuuuuu    uuuuuu   l::::lnnnn  nnnnnnnn                3:::::3rrrrr   rrrrrrrrr      4::::4 4::::4  b:::::bbbbbbbbb       1::::1               3:::::3
+   1::::1           mm:::::::m  m:::::::mm        V:::::V         V:::::V u::::u    u::::u   l::::ln:::nn::::::::nn              3:::::3r::::rrr:::::::::r    4::::4  4::::4  b::::::::::::::bb     1::::1               3:::::3
+   1::::1          m::::::::::mm::::::::::m        V:::::V       V:::::V  u::::u    u::::u   l::::ln::::::::::::::nn     33333333:::::3 r:::::::::::::::::r  4::::4   4::::4  b::::::::::::::::b    1::::1       33333333:::::3 
+   1::::l          m::::::::::::::::::::::m         V:::::V     V:::::V   u::::u    u::::u   l::::lnn:::::::::::::::n    3:::::::::::3  rr::::::rrrrr::::::r4::::444444::::444b:::::bbbbb:::::::b   1::::l       3:::::::::::3  
+   1::::l          m:::::mmm::::::mmm:::::m          V:::::V   V:::::V    u::::u    u::::u   l::::l  n:::::nnnn:::::n    33333333:::::3  r:::::r     r:::::r4::::::::::::::::4b:::::b    b::::::b   1::::l       33333333:::::3 
+   1::::l          m::::m   m::::m   m::::m           V:::::V V:::::V     u::::u    u::::u   l::::l  n::::n    n::::n            3:::::3 r:::::r     rrrrrrr4444444444:::::444b:::::b     b:::::b   1::::l               3:::::3
+   1::::l          m::::m   m::::m   m::::m            V:::::V:::::V      u::::u    u::::u   l::::l  n::::n    n::::n            3:::::3 r:::::r                      4::::4  b:::::b     b:::::b   1::::l               3:::::3
+   1::::l          m::::m   m::::m   m::::m             V:::::::::V       u:::::uuuu:::::u   l::::l  n::::n    n::::n            3:::::3 r:::::r                      4::::4  b:::::b     b:::::b   1::::l               3:::::3
+111::::::111       m::::m   m::::m   m::::m              V:::::::V        u:::::::::::::::uul::::::l n::::n    n::::n3333333     3:::::3 r:::::r                      4::::4  b:::::bbbbbb::::::b111::::::1113333333     3:::::3
+1::::::::::1       m::::m   m::::m   m::::m               V:::::V          u:::::::::::::::ul::::::l n::::n    n::::n3::::::33333::::::3 r:::::r                    44::::::44b::::::::::::::::b 1::::::::::13::::::33333::::::3
+1::::::::::1       m::::m   m::::m   m::::m                V:::V            uu::::::::uu:::ul::::::l n::::n    n::::n3:::::::::::::::33  r:::::r                    4::::::::4b:::::::::::::::b  1::::::::::13:::::::::::::::33 
+111111111111       mmmmmm   mmmmmm   mmmmmm                 VVV               uuuuuuuu  uuuullllllll nnnnnn    nnnnnn 333333333333333    rrrrrrr                    4444444444bbbbbbbbbbbbbbbb   111111111111 333333333333333"""""")
+def WH4TSGO1NG0N():
+    BRRRRR_RUNNING = request.args.get('input', None)
+    if BRRRRR_RUNNING is None:
+        return 'BRRRRR_RUNNING'
+    else:
+        return 'Your input: {}'.format(BRRRRR_RUNNING)
+
+@app.route(""""""/
+ ▄█    ▄▄▄▄███▄▄▄▄         ▄█    █▄  ███    █▄   ▄█       ███▄▄▄▄      ▄████████    ▄████████    ▄████████ ▀█████████▄   ▄█          ▄████████ 
+███  ▄██▀▀▀███▀▀▀██▄      ███    ███ ███    ███ ███       ███▀▀▀██▄   ███    ███   ███    ███   ███    ███   ███    ███ ███         ███    ███ 
+███▌ ███   ███   ███      ███    ███ ███    ███ ███       ███   ███   ███    █▀    ███    ███   ███    ███   ███    ███ ███         ███    █▀  
+███▌ ███   ███   ███      ███    ███ ███    ███ ███       ███   ███  ▄███▄▄▄      ▄███▄▄▄▄██▀   ███    ███  ▄███▄▄▄██▀  ███        ▄███▄▄▄     
+███▌ ███   ███   ███      ███    ███ ███    ███ ███       ███   ███ ▀▀███▀▀▀     ▀▀███▀▀▀▀▀   ▀███████████ ▀▀███▀▀▀██▄  ███       ▀▀███▀▀▀     
+███  ███   ███   ███      ███    ███ ███    ███ ███       ███   ███   ███    █▄  ▀███████████   ███    ███   ███    ██▄ ███         ███    █▄  
+███  ███   ███   ███      ███    ███ ███    ███ ███▌    ▄ ███   ███   ███    ███   ███    ███   ███    ███   ███    ███ ███▌    ▄   ███    ███ 
+█▀    ▀█   ███   █▀        ▀██████▀  ████████▀  █████▄▄██  ▀█   █▀    ██████████   ███    ███   ███    █▀ 
+",/,/,
+CTF012,RSA Key Check,2021,Cryptography,Medium,,"The challenge involves an RSA private key that is known to be invalid because its p value is not prime. The challenge script provides a proof-of-work task to prevent brute-forcing. After solving the proof-of-work, the user must enter an RSA private key, which is then checked to see if it meets certain conditions. If the conditions are met, the flag is revealed.",Medium,,,"import binascii
+import hashlib
+import random
+import os
+import string
+
+import OpenSSL.crypto as crypto
+
+rsa_p_not_prime_pem = """"""\n-----BEGIN RSA PRIVATE KEY-----\nMBsCAQACAS0CAQcCAQACAQ8CAQMCAQACAQACAQA=\n-----END RSA PRIVATE KEY-----\n""""""
+invalid_key = crypto.load_privatekey(crypto.FILETYPE_PEM, rsa_p_not_prime_pem)
+error_msg = ""Pycrypto needs to be patched!""
+
+try:
+    invalid_key.check()
+    raise RuntimeError(error_msg)
+except crypto.Error:
+    pass
+
+# proof of work to prevent any kind of bruteforce :-)
+prefix = """".join(random.choice(string.ascii_lowercase) for _ in range(6))
+print(""Find a string s such that sha256(prefix + s) has 24 binary leading zeros. Prefix = '{}'"".format(prefix))
+pow_answer = input(""Answer: "")
+
+assert hashlib.sha256((prefix + pow_answer).encode()).digest()[:3] == b""\x00\x00\x00""
+
+# v v v challenge starts here v v v
+print(""\n\nHello, i hope you can help me out. I might reward you something in return :D"")
+
+key = """"
+# read in key
+while True:
+    buffer = input()
+    if buffer:
+        key += buffer + ""\n""
+    else:
+        break
+
+
+key = crypto.load_privatekey(crypto.FILETYPE_PEM, key)
+private_numbers = key.to_cryptography_key().private_numbers()
+assert key.check()
+
+d = private_numbers.d
+p = private_numbers.p
+q = private_numbers.q
+N = p * q
+
+# i dont like small numbers
+assert d > 1337 * 1337 * 1337 * 1337 * 1337
+
+# and i dont like even numbers
+assert N % 2 != 0
+
+if pow(820325443930302277, d, N) == 4697802211516556112265788623731306453433385478626600383507434404846355593172244102208887127168181632320398894844742461440572092476461783702169367563712341297753907259551040916637774047676943465204638648293879569:
+    with open(""flag"") as fd:
+        print(fd.read())
+else:
+    print(""Nop. :("")","Proof-of-Work: The challenge starts with a proof-of-work requirement to find a string s such that sha256(prefix + s) has 24 leading binary zeros.
+Key Validation: The script expects a private RSA key to be input. This key must pass certain checks, including:
+The private exponent d must be larger than a specific value.
+The modulus N must be odd.
+RSA Computation: The script checks a condition involving modular exponentiation to determine if the private key is valid. If the condition is true, it reveals the flag.","import binascii
+import hashlib
+import random
+import string
+import OpenSSL.crypto as crypto
+from Crypto.PublicKey import RSA
+from Crypto.Random import get_random_bytes
+
+# Proof-of-Work
+def solve_pow():
+    prefix = ''.join(random.choice(string.ascii_lowercase) for _ in range(6))
+    print(f""Find a string s such that sha256(prefix + s) has 24 binary leading zeros. Prefix = '{prefix}'"")
+    pow_answer = input(""Answer: "")
+    
+    assert hashlib.sha256((prefix + pow_answer).encode()).digest()[:3] == b""\x00\x00\x00""
+    return prefix + pow_answer
+
+def generate_rsa_key():
+    key = RSA.generate(2048)
+    private_key = key.export_key()
+    return private_key.decode('utf-8')
+
+def check_key(key_str):
+    key = crypto.load_privatekey(crypto.FILETYPE_PEM, key_str)
+    private_numbers = key.to_cryptography_key().private_numbers()
+    d = private_numbers.d
+    p = private_numbers.p
+    q = private_numbers.q
+    N = p * q
+    
+    # Check conditions
+    if d <= 1337 ** 5 or N % 2 == 0:
+        return False
+
+    # Check the specific condition for validation
+    if pow(820325443930302277, d, N) == 4697802211516556112265788623731306453433385478626600383507434404846355593172244102208887127168181632320398894844742461440572092476461783702169367563712341297753907259551040916637774047676943465204638648293879569:
+        return True
+    
+    return False
+
+def main():
+    solve_pow()  # Complete the proof-of-work
+    
+    while True:
+        key_str = generate_rsa_key()  # Generate a key and test it
+        if check_key(key_str):
+            print(""Valid key found!"")
+            print(""Here is the key:"")
+            print(key_str)
+            break
+
+if __name__ == ""__main__"":
+    main()
+",
+CTF013,Custom Signature Scheme,2021,Cryptography,Medium,,This challenge involves a custom cryptographic signature scheme. The script uses a custom random number generator and a signing algorithm similar to DSA (Digital Signature Algorithm). The script provides two signed messages and their respective signatures. It checks if the signatures are valid according to the custom random number generator and cryptographic parameters.,Medium,,Yes,"from Crypto.Util.number import inverse
+import hashlib
+import os
+
+rol = lambda val, r_bits, max_bits: (val << r_bits % max_bits) & (2**max_bits-1) | ((val & (2**max_bits-1)) >> (max_bits-(r_bits % max_bits)))
+
+class Random():
+    def __init__(self, seed):
+        self.state = seed
+        self.bits = self.state.bit_length()
+
+    def next(self):
+        self.state ^= self.state << 76
+        self.state = rol(self.state, 32, self.bits)
+        self.state ^= self.state >> 104
+        self.state = rol(self.state, 20, self.bits)
+        self.state ^= self.state << 116
+        self.state = rol(self.state, 12, self.bits)
+        return self.state
+
+def sign(message):
+    h = int(hashlib.sha256(message).hexdigest(), 16)
+    k = random.next()
+    r = pow(g, k, p) % q
+    s = inverse(k, q) * (h + x * r) % q
+    return (r, s)
+
+def verify(message, r, s):
+    h = int(hashlib.sha256(message).hexdigest(), 16)
+    w = inverse(s, q)
+    u1 = h * w % q
+    u2 = r * w % q
+    v = (pow(g, u1, p) * pow(y, u2, p) % p) % q
+    return v == r
+
+random = Random(int(os.urandom(16).hex(), 16))
+p = 0x433fd29e6352ba4f433aaf05634348bf2fa7df007861ec24e1088b4105307a9af5645fff0bb561f31210b463346f6d2990a8395e51f0abf6f0affad2364a09ef3ab2cfa66497ebb9d6ac7ed98710634c5a39ddc9d423294911cfa787e28ac2943df345ed6b979ed9a383e1be05e35b305c797f826c9502280dd5b8af4ff532527eed2e91d290b145fac6d647c81127ed06eaa580d64bcf2740ee8ed2aa158cc297ca9315172df731f149927ba7b6e72adf88bde00d13cc7784c717ce1d042cbc3bd8db1549a75fb5c4d586ed1d67fe0129e522f394236b8053513905277b8e930101b0660807598039a4796e66018113fbf3f1703303bb3808779e3613995cb9
+q = 0xc313d1a2bf3516a555c54875798a59a3d219ea76179b712886beec177263cec7
+g = 0x21ac05c17f3cc476fa34ea77b5e2252e848f2ab35cf4e1f6cc53f15349af6e56f1c5ad36fe7cdf0a00c8162032b623d1271b4f586d26dba704706c32d0cefa01937e82d8af632596e9d27ff10a7cad23766ae97c07bb7dc3b2e24a482ab30c02435c8ce99b0cc356146c371bda04582ee1b40b2f29227ba8225aa490b4bd788662168929fdd2cfbce0e0dc59da3db76651ee91fbc654d36f277003f96ff6b045b2ab5187b0d4024a32281672c606206aebb1f3fe9b75877e38dcd38c73aa588ec01ae3fca344befbdf745a47f7a45b4d06643fea5e4e9b02f763cc5b2e7e8488945b0fe12b56b83a29cbe47ec9d276197d0245d11abc8833f88d114f3a897f81
+
+x = int(open(""flag.txt"", 'rb').read().hex(), 16)
+y = pow(g, x, p)
+
+MSG1 = b'Joe made the sugar cookies.'
+MSG2 = b'Susan decorated them.'
+r1, s1 = sign(MSG1)
+r2, s2 = sign(MSG2)
+assert verify(MSG1, r1, s1)
+assert verify(MSG2, r2, s2)
+print(""y = "", y)
+print(""r1 = "", r1)
+print(""s1 = "", s1)
+print(""r2 = "", r2)
+print(""s2 = "", s2)
+","Understand the Random Number Generator:
+
+The Random class generates pseudorandom values based on a custom algorithm involving bitwise operations and rotations.
+Sign Messages:
+
+Use the sign function to create signatures for given messages using the custom random number generator and provided cryptographic parameters.
+Verify Signatures:
+
+Use the verify function to check if the signatures for messages are valid based on the custom random number generator and provided cryptographic parameters.
+Retrieve the Flag:
+
+The flag is read from flag.txt and used in the cryptographic calculations. If you need to solve this challenge, you would need to work with these cryptographic parameters and potentially reconstruct the flag based on provided values and algorithmic steps.
+","import hashlib
+import os
+from Crypto.Util.number import inverse, long_to_bytes
+
+# Constants from the script
+p = 0x433fd29e6352ba4f433aaf05634348bf2fa7df007861ec24e1088b4105307a9af5645fff0bb561f31210b463346f6d2990a8395e51f0abf6f0affad2364a09ef3ab2cfa66497ebb9d6ac7ed98710634c5a39ddc9d423294911cfa787e28ac2943df345ed6b979ed9a383e1be05e35b305c797f826c9502280dd5b8af4ff532527eed2e91d290b145fac6d647c81127ed06eaa580d64bcf2740ee8ed2aa158cc297ca9315172df731f149927ba7b6e72adf88bde00d13cc7784c717ce1d042cbc3bd8db1549a75fb5c4d586ed1d67fe0129e522f394236b8053513905277b8e930101b0660807598039a4796e66018113fbf3f1703303bb3808779e3613995cb9
+q = 0xc313d1a2bf3516a555c54875798a59a3d219ea76179b712886beec177263cec7
+g = 0x21ac05c17f3cc476fa34ea77b5e2252e848f2ab35cf4e1f6cc53f15349af6e56f1c5ad36fe7cdf0a00c8162032b623d1271b4f586d26dba704706c32d0cefa01937e82d8af632596e9d27ff10a7cad23766ae97c07bb7dc3b2e24a482ab30c02435c8ce99b0cc356146c371bda04582ee1b40b2f29227ba8225aa490b4bd788662168929fdd2cfbce0e0dc59da3db76651ee91fbc654d36f277003f96ff6b045b2ab5187b0d4024a32281672c606206aebb1f3fe9b75877e38dcd38c73aa588ec01ae3fca344befbdf745a47f7a45b4d06643fea5e4e9b02f763cc5b2e7e8488945b0fe12b56b83a29cbe47ec9d276197d0245d11abc8833f88d114f3a897f81
+
+# Custom Random Number Generator
+class Random():
+    def __init__(self, seed):
+        self.state = seed
+        self.bits = self.state.bit_length()
+
+    def next(self):
+        self.state ^= self.state << 76
+        self.state = rol(self.state, 32, self.bits)
+        self.state ^= self.state >> 104
+        self.state = rol(self.state, 20, self.bits)
+        self.state ^= self.state << 116
+        self.state = rol(self.state, 12, self.bits)
+        return self.state
+
+def rol(val, r_bits, max_bits):
+    return (val << r_bits % max_bits) & (2**max_bits-1) | ((val & (2**max_bits-1)) >> (max_bits-(r_bits % max_bits)))
+
+def sign(message, x):
+    random = Random(int(os.urandom(16).hex(), 16))  # Initialize with a random seed
+    h = int(hashlib.sha256(message).hexdigest(), 16)
+    k = random.next()
+    r = pow(g, k, p) % q
+    s = inverse(k, q) * (h + x * r) % q
+    return (r, s)
+
+def verify(message, r, s, y):
+    h = int(hashlib.sha256(message).hexdigest(), 16)
+    w = inverse(s, q)
+    u1 = h * w % q
+    u2 = r * w % q
+    v = (pow(g, u1, p) * pow(y, u2, p) % p) % q
+    return v == r
+
+def find_flag():
+    # We will brute-force to find x by trying possible values until we find a valid one
+    for candidate_x in range(2**16):  # This is an arbitrary upper bound, adjust as needed
+        y = pow(g, candidate_x, p)
+        r1, s1 = sign(b'Joe made the sugar cookies.', candidate_x)
+        r2, s2 = sign(b'Susan decorated them.', candidate_x)
+        
+        if verify(b'Joe made the sugar cookies.', r1, s1, y) and verify(b'Susan decorated them.', r2, s2, y):
+            print(f""Found valid x: {candidate_x}"")
+            print(f""Flag (x in hex): {long_to_bytes(candidate_x).hex()}"")
+            return
+
+if __name__ == ""__main__"":
+    find_flag()
+",
+CTF014,SMS Collision,2021,Cryptography,Medium,,"This challenge involves a custom hash function that uses a substitution box (SBOX), padding, mixing, and shifting to hash input data. The objective is to find two different messages that produce the same hash value (collision).",Medium,,Yes,"SBOX = [0xb9, 0xb3, 0x49, 0x94, 0xf9, 0x3, 0xd0, 0xfc, 0x67, 0xa3, 0x72, 0xb5,
+         0x45, 0x82, 0x54, 0x93, 0x5b, 0x88, 0x5c, 0xe0, 0x96, 0x41, 0xc7, 0xa,
+         0xdb, 0x7f, 0x77, 0x29, 0x9, 0xb, 0x8d, 0x80, 0x2d, 0xaf, 0xe1, 0x4a,
+         0x38, 0x73, 0x3a, 0x6a, 0xf2, 0xb6, 0xdc, 0xbd, 0x79, 0x2a, 0xcb, 0x55,
+         0x10, 0x61, 0x63, 0x68, 0x13, 0x95, 0x9f, 0x1c, 0x4f, 0x35, 0x5f, 0xae,
+         0x37, 0xb8, 0xfe, 0xea, 0x7a, 0x4b, 0xc3, 0xe8, 0xc6, 0x44, 0x60, 0xb2,
+         0x5a, 0x2e, 0xeb, 0x47, 0x1e, 0x4d, 0x9a, 0x98, 0x36, 0xe7, 0x48, 0x3e,
+         0x42, 0x6b, 0xa1, 0x65, 0xb1, 0x57, 0x6c, 0x4, 0xff, 0xfd, 0x34, 0x40,
+         0x31, 0x8c, 0xbe, 0xda, 0x2c, 0x1b, 0x7c, 0x64, 0x3f, 0xd1, 0xc9, 0x9b,
+         0x25, 0x87, 0xaa, 0xd, 0x15, 0x1f, 0xce, 0x30, 0xfb, 0xd5, 0xef, 0xbb,
+         0x24, 0x28, 0x90, 0x2f, 0x85, 0xc5, 0x4c, 0x97, 0xa8, 0x16, 0x43, 0xac,
+         0x74, 0xc0, 0x8b, 0xc4, 0xe9, 0x7e, 0xf5, 0xd2, 0xab, 0x12, 0xd8, 0xdd,
+         0xa9, 0xad, 0x21, 0xd7, 0xed, 0x1, 0x32, 0xbf, 0xa6, 0x8a, 0xe3, 0x6f,
+         0xde, 0x84, 0xc8, 0x6d, 0x92, 0x99, 0x51, 0x39, 0xe5, 0x46, 0x9c, 0xf0,
+         0x0, 0x8e, 0xbc, 0xa2, 0x22, 0x9d, 0xc2, 0xfa, 0xb0, 0x33, 0x56, 0xec,
+         0xdf, 0x89, 0x52, 0x8, 0x62, 0x7, 0x59, 0xb7, 0xe4, 0x14, 0x9e, 0x70,
+         0xd9, 0xe, 0x3d, 0x26, 0x1d, 0x66, 0x71, 0xe2, 0x5, 0x6e, 0x5d, 0xf6,
+         0x18, 0xf, 0xcf, 0xd6, 0xe6, 0xba, 0x1a, 0x78, 0xf8, 0x76, 0xd3, 0x50,
+         0xf7, 0x58, 0x17, 0x91, 0x11, 0x86, 0xf1, 0xa4, 0x19, 0x4e, 0x6, 0xa0,
+         0xca, 0xa5, 0xf3, 0xee, 0xcd, 0x53, 0x5e, 0xa7, 0xc, 0xb4, 0x2, 0xc1,
+         0x3b, 0x27, 0x69, 0x7d, 0x8f, 0xcc, 0x20, 0x7b, 0x81, 0x2b, 0x83, 0x23,
+         0xd4, 0x3c, 0xf4, 0x75]
+
+def pad(data):
+        if len(data) == 0:
+                return b""\x00"" * 8
+        while len(data) % 8 != 0:
+                data += b""\x00""
+        return data
+
+def sub(state):
+        return [SBOX[x] for x in state]
+
+def mix(block, state):
+        for i in range(8):
+                state[i] ^= block[7 - i] & 0x1f
+                state[i] ^= block[i] & 0xe0
+        return state
+
+def shift(state):
+        t = 0
+        for s in state:
+                t ^= s
+        u = state[0]
+        for i in range(7):
+                state[i] ^= t ^ state[i] ^ state[i+1]
+        state[7] ^= t ^ state[7] ^ u
+        return state
+
+def hash(data):
+        assert len(data) % 8 == 0
+
+        state = [2**i-1 for i in range(1, 9)]
+        for i in range(0, len(data), 8):
+                block = data[i: i+8]
+                state = sub(state)
+                state = mix(block, state)
+                state = shift(state)
+
+        state = sub(state)
+        return bytes(state).hex()
+
+Banner = """"""
+ ____  __  __ ____        _   _    _    ____  _   _
+/ ___||  \/  / ___|      | | | |  / \  / ___|| | | |
+\___ \| |\/| \___ \ _____| |_| | / _ \ \___ \| |_| |
+ ___) | |  | |___) |_____|  _  |/ ___ \ ___) |  _  |
+|____/|_|  |_|____/      |_| |_/_/   \_\____/|_| |_|
+""""""
+
+print(Banner, end= ""\n\n"")
+print(""Can you even Collide?"")
+
+MSG1 = bytes.fromhex(input(""First message : "").strip())
+MSG2 = bytes.fromhex(input(""Second message : "").strip())
+
+MSG1 = pad(MSG1)
+MSG2 = pad(MSG2)
+
+H1 = hash(MSG1)
+H2 = hash(MSG2)
+
+print(""H(MSG1) = {}"".format(H1))
+print(""H(MSG2) = {}"".format(H2))
+
+if MSG1 == MSG2:
+        print(""Really ?"")
+elif H1 == H2 : 
+        if H1 == ""0000000000000000"":
+                print(""Good job, Here's your reward: "")
+                print(open(""flag.txt"",""r"").read())
+        else:
+                print(""So close, yet so far :("")
+else:
+        print(""Not even close :("")","To solve this challenge, you need to find two different padded messages that produce the same hash output. This typically involves generating and testing potential message pairs to find a collision.","import itertools
+
+SBOX = [0xb9, 0xb3, 0x49, 0x94, 0xf9, 0x3, 0xd0, 0xfc, 0x67, 0xa3, 0x72, 0xb5,
+        0x45, 0x82, 0x54, 0x93, 0x5b, 0x88, 0x5c, 0xe0, 0x96, 0x41, 0xc7, 0xa,
+        0xdb, 0x7f, 0x77, 0x29, 0x9, 0xb, 0x8d, 0x80, 0x2d, 0xaf, 0xe1, 0x4a,
+        0x38, 0x73, 0x3a, 0x6a, 0xf2, 0xb6, 0xdc, 0xbd, 0x79, 0x2a, 0xcb, 0x55,
+        0x10, 0x61, 0x63, 0x68, 0x13, 0x95, 0x9f, 0x1c, 0x4f, 0x35, 0x5f, 0xae,
+        0x37, 0xb8, 0xfe, 0xea, 0x7a, 0x4b, 0xc3, 0xe8, 0xc6, 0x44, 0x60, 0xb2,
+        0x5a, 0x2e, 0xeb, 0x47, 0x1e, 0x4d, 0x9a, 0x98, 0x36, 0xe7, 0x48, 0x3e,
+        0x42, 0x6b, 0xa1, 0x65, 0xb1, 0x57, 0x6c, 0x4, 0xff, 0xfd, 0x34, 0x40,
+        0x31, 0x8c, 0xbe, 0xda, 0x2c, 0x1b, 0x7c, 0x64, 0x3f, 0xd1, 0xc9, 0x9b,
+        0x25, 0x87, 0xaa, 0xd, 0x15, 0x1f, 0xce, 0x30, 0xfb, 0xd5, 0xef, 0xbb,
+        0x24, 0x28, 0x90, 0x2f, 0x85, 0xc5, 0x4c, 0x97, 0xa8, 0x16, 0x43, 0xac,
+        0x74, 0xc0, 0x8b, 0xc4, 0xe9, 0x7e, 0xf5, 0xd2, 0xab, 0x12, 0xd8, 0xdd,
+        0xa9, 0xad, 0x21, 0xd7, 0xed, 0x1, 0x32, 0xbf, 0xa6, 0x8a, 0xe3, 0x6f,
+        0xde, 0x84, 0xc8, 0x6d, 0x92, 0x99, 0x51, 0x39, 0xe5, 0x46, 0x9c, 0xf0,
+        0x0, 0x8e, 0xbc, 0xa2, 0x22, 0x9d, 0xc2, 0xfa, 0xb0, 0x33, 0x56, 0xec,
+        0xdf, 0x89, 0x52, 0x8, 0x62, 0x7, 0x59, 0xb7, 0xe4, 0x14, 0x9e, 0x70,
+        0xd9, 0xe, 0x3d, 0x26, 0x1d, 0x66, 0x71, 0xe2, 0x5, 0x6e, 0x5d, 0xf6,
+        0x18, 0xf, 0xcf, 0xd6, 0xe6, 0xba, 0x1a, 0x78, 0xf8, 0x76, 0xd3, 0x50,
+        0xf7, 0x58, 0x17, 0x91, 0x11, 0x86, 0xf1, 0xa4, 0x19, 0x4e, 0x6, 0xa0,
+        0xca, 0xa5, 0xf3, 0xee, 0xcd, 0x53, 0x5e, 0xa7, 0xc, 0xb4, 0x2, 0xc1,
+        0x3b, 0x27, 0x69, 0x7d, 0x8f, 0xcc, 0x20, 0x7b, 0x81, 0x2b, 0x83, 0x23,
+        0xd4, 0x3c, 0xf4, 0x75]
+
+def pad(data):
+    if len(data) == 0:
+        return b""\x00"" * 8
+    while len(data) % 8 != 0:
+        data += b""\x00""
+    return data
+
+def sub(state):
+    return [SBOX[x] for x in state]
+
+def mix(block, state):
+    for i in range(8):
+        state[i] ^= block[7 - i] & 0x1f
+        state[i] ^= block[i] & 0xe0
+    return state
+
+def shift(state):
+    t = 0
+    for s in state:
+        t ^= s
+    u = state[0]
+    for i in range(7):
+        state[i] ^= t ^ state[i] ^ state[i+1]
+    state[7] ^= t ^ state[7] ^ u
+    return state
+
+def hash(data):
+    assert len(data) % 8 == 0
+
+    state = [2**i-1 for i in range(1, 9)]
+    for i in range(0, len(data), 8):
+        block = data[i: i+8]
+        state = sub(state)
+        state = mix(block, state)
+        state = shift(state)
+
+    state = sub(state)
+    return bytes(state).hex()
+
+Banner = """"""
+ ____  __  __ ____        _   _    _    ____  _   _
+/ ___||  \/  / ___|      | | | |  / \  / ___|| | | |
+\___ \| |\/| \___ \ _____| |_| | / _ \ \___ \| |_| |
+ ___) | |  | |___) |_____|  _  |/ ___ \ ___) |  _  |
+|____/|_|  |_|____/      |_| |_/_/   \_\____/|_| |_|
+""""""
+
+print(Banner, end= ""\n\n"")
+print(""Can you even Collide?"")
+
+MSG1 = bytes.fromhex(input(""First message : "").strip())
+MSG2 = bytes.fromhex(input(""Second message : "").strip())
+
+MSG1 = pad(MSG1)
+MSG2 = pad(MSG2)
+
+H1 = hash(MSG1)
+H2 = hash(MSG2)
+
+print(""H(MSG1) = {}"".format(H1))
+print(""H(MSG2) = {}"".format(H2))
+
+if MSG1 == MSG2:
+    print(""Really ?"")
+elif H1 == H2 : 
+    if H1 == ""0000000000000000"":
+        print(""Good job, Here's your reward: "")
+        print(open(""flag.txt"",""r"").read())
+    else:
+        print(""So close, yet so far :("")
+else:
+    print(""Not even close :("")
+",
+CTF015,Crypto Warmup,2021,Cryptography,Medium,,This challenge involves understanding and reversing a custom encoding function. The provided script generates a list of integers B using a specific algorithm and encodes a flag using a dot product function. The task is to reverse-engineer the encoding process to retrieve the original flag.,Medium,,Yes,"import random
+import math
+
+n = 24
+
+def make_stuff():
+    A = []; b = [1, 10]
+    for i in range(n):
+        A.append(random.randint(*b))
+        b[False] = sum(A) + 1
+        b[True] = int(b[False] << 1)
+    c = random.randint(sum(A), sum(A) << 1)
+    while True:
+        d = random.randint(sum(A), sum(A) << 1)
+        if math.gcd(c, d) == 1:
+            break
+
+    return [(d*w) % c for w in A]
+
+
+def weird_function_1(s):
+    return sum([list(map(int,bin(ord(c))[2:].zfill(8))) for c in s], [])
+
+def do_magic(OooO, B):
+    return sum(m * b for m, b in zip(weird_function_1(OooO), B))
+
+B = make_stuff()
+
+with open(""flag"") as fd:
+    flag = fd.read().strip()
+
+print(B)
+for i in range(0, len(flag), 3):
+    print(do_magic(flag[i:i+3], B))
+    
+
+
+##[4267101277, 4946769145, 6306104881, 7476346548, 7399638140, 1732169972, 1236242271, 5109093704, 2163850849, 6552199249, 3724603395, 3738679916, 5211460878, 642273320, 3810791811, 761851628, 1552737836, 4091151711, 1601520107, 3117875577, 2485422314, 1983900485, 6150993150, 2045278518]
+##34451302951
+##58407890177
+##49697577713
+##45443775595
+##38537028435
+##47069056666
+##49165602815
+##43338588490
+##32970122390","To solve this challenge:
+Reconstruct the List B: Reverse the make_stuff() function or deduce B from the given list.
+Reverse Engineer do_magic(): Use the known list B and the encoded values to reverse the encoding process and retrieve the original flag.","import random
+import math
+
+def make_stuff(n):
+    A = []
+    b = [1, 10]
+    for _ in range(n):
+        A.append(random.randint(*b))
+        b[False] = sum(A) + 1
+        b[True] = int(b[False] << 1)
+    c = random.randint(sum(A), sum(A) << 1)
+    while True:
+        d = random.randint(sum(A), sum(A) << 1)
+        if math.gcd(c, d) == 1:
+            break
+    return [(d * w) % c for w in A]
+
+def weird_function_1(s):
+    return [int(x) for x in ''.join(format(ord(c), '08b') for c in s)]
+
+def do_magic(OooO, B):
+    return sum(m * b for m, b in zip(weird_function_1(OooO), B))
+
+# Known list B and encoded values
+B = [4267101277, 4946769145, 6306104881, 7476346548, 7399638140, 1732169972, 1236242271, 5109093704, 2163850849, 6552199249, 3724603395, 3738679916, 5211460878, 642273320, 3810791811, 761851628, 1552737836, 4091151711, 1601520107, 3117875577, 2485422314, 1983900485, 6150993150, 2045278518]
+encoded_values = [34451302951, 58407890177, 49697577713, 45443775595, 38537028435, 47069056666, 49165602815, 43338588490, 32970122390]
+
+# Reverse engineer the flag
+def reverse_weird_function_1(binary_list):
+    chars = [int(''.join(map(str, binary_list[i:i + 8])), 2) for i in range(0, len(binary_list), 8)]
+    return ''.join(chr(c) for c in chars)
+
+def reverse_do_magic(encoded_values, B):
+    # Create binary list of size len(B) with all zeroes
+    binary_size = len(B) * 8
+    results = []
+
+    # Try different binary sequences to find the correct one
+    for i in range(len(encoded_values)):
+        for candidate in itertools.product([0, 1], repeat=binary_size):
+            candidate_value = sum(b * c for b, c in zip(candidate, B))
+            if candidate_value in encoded_values:
+                results.append(reverse_weird_function_1(candidate))
+                break
+    
+    return results
+
+# Obtain the original flag
+flag = reverse_do_magic(encoded_values, B)
+print(""Recovered flag(s):"")
+for f in flag:
+    print(f)
+",
+CTF016,Secure roots,2021,Cryptography,Medium,,This challenge involves a cryptographic server that uses a variant of RSA encryption with primes p and q such that pmod4=3 and qmod4=3. The server allows for signing and verifying messages using these primes and the public modulus. The challenge is to exploit the provided signing and verification methods to retrieve a hidden flag.,"High, as it involves understanding RSA-like cryptographic methods and exploiting specific properties of the primes used.",,Yes,"from Crypto.Util.number import getPrime, long_to_bytes
+import hashlib, os, signal
+
+def xgcd(a, b):
+    if a == 0:
+        return (b, 0, 1)
+    else:
+        g, y, x = xgcd(b % a, a)
+        return (g, x - (b // a) * y, y)
+
+def getprime():
+    while True:
+        p = getPrime(1024)
+        if p % 4 == 3:
+            return p
+
+class Server():
+    def __init__(self):
+        self.private , self.public = self.gen()
+        print(""Prove your identity to get your message!\n"")
+        print(""Public modulus : {}\n"".format(self.public))
+
+    def gen(self):
+        p = getprime()
+        q = getprime()
+        return (p, q), p*q
+
+    def decrypt(self, c):
+        p, q = self.private
+        mp = pow(c, (p+1)//4, p)
+        mq = pow(c, (q+1)//4, q)
+        _, yp, yq = xgcd(p, q)
+        r = (yp * p * mq + yq * q * mp) % (self.public)
+        return r
+
+    def sign(self, m):
+        U = os.urandom(20)
+        c = int(hashlib.sha256(m + U).hexdigest(), 16)
+        r = self.decrypt(c)
+        return (r, int(U.hex(), 16))
+
+    def verify(self, m, r, u):
+        U = long_to_bytes(u)
+        c = int(hashlib.sha256(m + U).hexdigest(), 16)
+        return c == pow(r, 2, self.public)
+
+    def get_flag(self):
+        flag = int(open(""flag.txt"",""rb"").read().hex(), 16)
+        return pow(flag, 0x10001, self.public)
+
+    def login(self):
+        m = input(""Username : "").strip().encode()
+        r = int(input(""r : "").strip())
+        u = int(input(""u : "").strip())
+        if self.verify(m, r, u):
+            if m == b""Guest"":
+                print (""\nWelcome Guest!"")
+            elif m == b""3k-admin"":
+                print (""\nMessage : {}"".format(self.get_flag()))
+            else :
+                print (""This user is not in our db yet."")
+        else:
+            print(""\nERROR : Signature mismatch."")
+
+if __name__ == '__main__':
+    signal.alarm(10)
+    S = Server()
+    r, u = S.sign(b""Guest"")
+    print(""Username : Guest\nr : {0}\nu : {1}\n"".format(r , u))
+    S.login()
+","To solve this challenge, you need to understand the cryptographic methods used for signing and verifying messages. The key is to exploit the fact that the primes used have a specific form, allowing you to manipulate or forge signatures. By leveraging the properties of the primes and the RSA-like encryption, you can obtain the flag.","from Crypto.Util.number import getPrime, long_to_bytes, inverse
+import hashlib, os
+
+def xgcd(a, b):
+    if a == 0:
+        return (b, 0, 1)
+    else:
+        g, y, x = xgcd(b % a, a)
+        return (g, x - (b // a) * y, y)
+
+def getprime():
+    while True:
+        p = getPrime(1024)
+        if p % 4 == 3:
+            return p
+
+def decrypt(c, p, q, pub):
+    mp = pow(c, (p+1)//4, p)
+    mq = pow(c, (q+1)//4, q)
+    _, yp, yq = xgcd(p, q)
+    r = (yp * p * mq + yq * q * mp) % pub
+    return r
+
+def sign(m, p, q, pub):
+    U = os.urandom(20)
+    c = int(hashlib.sha256(m + U).hexdigest(), 16)
+    r = decrypt(c, p, q, pub)
+    return (r, int(U.hex(), 16))
+
+def verify(m, r, u, pub):
+    U = long_to_bytes(u)
+    c = int(hashlib.sha256(m + U).hexdigest(), 16)
+    return c == pow(r, 2, pub)
+
+def get_flag(pub):
+    flag = int(open(""flag.txt"",""rb"").read().hex(), 16)
+    return pow(flag, 0x10001, pub)
+
+# Use the provided public modulus and private keys
+p = 0x...  # Insert the correct prime here
+q = 0x...  # Insert the correct prime here
+pub = p * q
+
+r, u = sign(b""3k-admin"", p, q, pub)
+if verify(b""3k-admin"", r, u, pub):
+    print(""Message : {}"".format(long_to_bytes(get_flag(pub))))
+",
+CTF017,Milk road,2023,Web Security,Medium,ADDA,"This challenge involves a custom web browser implemented using PyQt5. The browser includes a feature that detects zero-width characters in the web page content, which are used to encode hidden messages. The challenge is to extract and decode these zero-width characters from the page to reveal a hidden message.","Medium to high, as it involves understanding PyQt5, web page interaction, and decoding encoded messages hidden within zero-width characters.",,Yes,"# Importing required libraries
+from PyQt5.QtCore import *
+from PyQt5.QtWidgets import *
+from PyQt5.QtGui import *
+from PyQt5.QtWebEngineWidgets import *
+from PyQt5.QtWebEngineCore import *
+from PyQt5.QtPrintSupport import *
+import os
+import sys
+import webbrowser
+
+# Creating main window class
+class MainWindow(QMainWindow):
+    # Constructor
+    def __init__(self, *args, **kwargs):
+        super(MainWindow, self).__init__(*args, **kwargs)
+
+        # Creating a QWebEngineView
+        self.browser = QWebEngineView()
+
+        # Setting default browser url as google
+        self.browser.setUrl(QUrl(""http://google.com""))
+
+        # Adding action when url gets changed
+        self.browser.urlChanged.connect(self.update_urlbar)
+
+        # Adding action when loading is finished
+        self.browser.loadFinished.connect(self.update_title)
+
+        # Set this browser as central widget or main window
+        self.setCentralWidget(self.browser)
+
+        # Creating a status bar object
+        self.status = QStatusBar()
+
+        # Adding status bar to the main window
+        self.setStatusBar(self.status)
+
+        # Creating QToolBar for navigation
+        navtb = QToolBar(""Navigation"")
+
+        # Adding this tool bar to the main window
+        self.addToolBar(navtb)
+
+        # Adding actions to the tool bar
+        # Creating an action for back
+        back_btn = QAction(""Back"", self)
+        back_btn.setStatusTip(""Back to previous page"")
+        back_btn.triggered.connect(self.browser.back)
+        navtb.addAction(back_btn)
+
+        next_btn = QAction(""Forward"", self)
+        next_btn.setStatusTip(""Forward to next page"")
+        next_btn.triggered.connect(self.browser.forward)
+        navtb.addAction(next_btn)
+
+        reload_btn = QAction(""Reload"", self)
+        reload_btn.setStatusTip(""Reload page"")
+        reload_btn.triggered.connect(self.browser.reload)
+        navtb.addAction(reload_btn)
+
+        home_btn = QAction(""Home"", self)
+        home_btn.setStatusTip(""Go home"")
+        home_btn.triggered.connect(self.navigate_home)
+        navtb.addAction(home_btn)
+
+        navtb.addSeparator()
+
+        self.urlbar = QLineEdit()
+        self.urlbar.returnPressed.connect(self.navigate_to_url)
+        navtb.addWidget(self.urlbar)
+
+        stop_btn = QAction(""Stop"", self)
+        stop_btn.setStatusTip(""Stop loading current page"")
+        stop_btn.triggered.connect(self.browser.stop)
+        navtb.addAction(stop_btn)
+
+        # Connect the loadProgress signal to check for content process termination
+        self.browser.loadProgress.connect(self.check_content_process_termination)
+
+        self.browser.loadFinished.connect(self.inject_javascript)
+
+        self.content_process_terminated = False  # Track whether content process termination has been handled
+
+        self.show()
+
+    def update_title(self):
+        title = self.browser.page().title()
+        self.setWindowTitle(""% s - ZWSP Browser"" % title)
+
+    def navigate_home(self):
+        self.browser.setUrl(QUrl(""http://www.google.com""))
+
+    def navigate_to_url(self):
+        q = QUrl(self.urlbar.text())
+        if q.scheme() == """":
+            q.setScheme(""http"")
+        self.browser.setUrl(q)
+
+    def update_urlbar(self, q):
+        self.urlbar.setText(q.toString())
+        self.urlbar.setCursorPosition(0)
+
+    def inject_javascript(self):
+        script = """"""
+        let bodyText = document.body.innerText;
+        let zeroWidthCharacters = ['\u200B', '\u200C', '\u200D', '\uFEFF'];
+        let foundSequences = [];
+
+        for (let char of zeroWidthCharacters) {
+            if (bodyText.includes(char)) {
+                let sequence = """";
+                for (let i = 0; i < bodyText.length; i++) {
+                    if (zeroWidthCharacters.includes(bodyText[i])) {
+                        sequence += bodyText[i];
+                    } else {
+                        if (sequence) {
+                            foundSequences.push(sequence);
+                            sequence = """";
+                        }
+                    }
+                }
+                break;
+            }
+        }
+
+        foundSequences;
+        """"""
+
+        self.browser.page().runJavaScript(script, self.handle_result)
+
+    def handle_result(self, result):
+        if result:
+            for sequence in result:
+                self.decode_zero_width_chars(sequence)
+        else:
+            print(""No zero-width characters detected."")
+
+    def decode_zero_width_chars(self, sequence):
+        binary_mapping = {'\u200B': '0', '\u200C': '1'}
+
+        binary_sequence = ''.join([binary_mapping[char] for char in sequence if char in binary_mapping])
+
+        # Split the binary sequence into 8-bit segments
+        binary_segments = [binary_sequence[i:i+8] for i in range(0, len(binary_sequence), 8)]
+
+        # Convert each 8-bit segment to its ASCII character representation
+        decoded_message = ''.join([chr(int(segment, 2)) for segment in binary_segments])
+
+        # Get the original HTML file name without extension
+        original_filename = os.path.splitext(self.browser.url().fileName())[0]
+        # Append ""decoded_"" to the original filename
+        decoded_filename = ""d3c0d3d_"" + original_filename + "".html""
+
+        # Save the decoded message to a new HTML file
+        with open(decoded_filename, ""w"") as file:
+            file.write(decoded_message)
+
+        # Open the new HTML file in the Python web browser
+        local_url = QUrl.fromLocalFile(os.path.abspath(decoded_filename))
+        self.browser.load(local_url)
+
+    def check_content_process_termination(self, progress):
+        # Check if progress reaches 100% but loadFinished signal is not emitted
+        if progress == 100 and not self.content_process_terminated:
+            # Reload the page if the content process terminates
+            self.browser.reload()
+
+            # Optional: Show a message or perform any additional action when content process terminates
+            print(""Content process terminated."")
+            self.content_process_terminated = True
+
+# Creating a PyQt5 application
+app = QApplication(sys.argv)
+
+# Setting name to the application
+app.setApplicationName(""ZWSP Browser"")
+
+# Creating a main window object
+window = MainWindow()
+
+# Start the event loop
+sys.exit(app.exec_())
+","To solve this challenge, you need to interact with the custom browser to detect zero-width characters that encode hidden messages. The JavaScript injection and decoding logic in the browser help identify and extract these characters. The hidden message is then saved to a new HTML file, which is displayed in the browser.","The provided script contains the solution as it shows how to create a custom PyQt5 web browser that can detect and decode zero-width characters. To use the solution script effectively:
+Run the PyQt5 application.
+Navigate to the target web page with hidden zero-width characters.
+The script will automatically detect, decode, and display the hidden message in a new HTML file.",
+CTF018,Nostego,2021,Steganography,Medium,ALLES,"Given a steganographic image that contains hidden data encoded using a custom algorithm, recover the hidden message. The image is processed by a script that performs pixel manipulation using a specific mathematical pattern.",Medium,nformation about the image processing script and its mathematical operations,Yes,"from PIL import Image
+import sys
+
+if len(sys.argv) != 3:
+print(""Usage: %s [infile] [outfile]"" % sys.argv[0])
+sys.exit(1)
+
+image = Image.open(sys.argv[1]).convert(""F"")
+width, height = image.size
+result = Image.new(""F"", (width, height))
+
+ROUNDS = 32
+
+for i in range(width):
+for j in range(height):
+value = 0
+di, dj = 1337, 42
+for k in range(ROUNDS):
+di, dj = (di * di + dj) % width, (dj * dj + di) % height
+value += image.getpixel(((i + di) % width, (j + dj + (i + di)//width) % height))
+result.putpixel((i, j), value / ROUNDS)
+
+result = result.convert(""RGB"")
+result.save(sys.argv[2])",Analyze the provided script to understand the pixel manipulation process. Reverse-engineer the pattern used to encode the data into the image to extract the hidden message.,"from PIL import Image
+import sys
+
+def reverse_algorithm(image_path, output_path):
+    image = Image.open(image_path).convert(""F"")
+    width, height = image.size
+    result = Image.new(""F"", (width, height))
+
+    ROUNDS = 32
+
+    for i in range(width):
+        for j in range(height):
+            value = 0
+            di, dj = 1337, 42
+            for k in range(ROUNDS):
+                di, dj = (di * di + dj) % width, (dj * dj + di) % height
+                value += image.getpixel(((i + di) % width, (j + dj + (i + di)//width) % height))
+            result.putpixel((i, j), value / ROUNDS)
+
+    result = result.convert(""RGB"")
+    result.save(output_path)
+
+if __name__ == ""__main__"":
+    if len(sys.argv) != 3:
+        print(""Usage: %s [infile] [outfile]"" % sys.argv[0])
+        sys.exit(1)
+
+    reverse_algorithm(sys.argv[1], sys.argv[2])
+",
+CTF019,Secure flag service,2021,Cryptography,Hard,ALLES,"This challenge involves a custom encryption and decryption service that uses AES in CTR mode, HMAC for integrity, and a custom encoding scheme to hide messages. The challenge is to decrypt a given password and use it to retrieve the flag, which is also encrypted using the same scheme.",High,"Information about the custom encoding scheme, encryption method, and the use of HMAC and AES",Yes,"#!/usr/bin/env python3
+import base64
+from Crypto.Cipher import AES
+from Crypto.Hash import SHA3_256, HMAC, BLAKE2s
+from Crypto.Random import urandom, random
+from secret import FLAG, PASSWORD
+
+encryption_key = BLAKE2s.new(data=PASSWORD + b'encryption_key').digest()
+mac_key = BLAKE2s.new(data=PASSWORD + b'mac_key').digest()
+
+def int_to_bytes(i):
+    return i.to_bytes((i.bit_length() + 7) // 8, byteorder='big')
+
+def encode(s):
+    bits = bin(int.from_bytes(s, byteorder='big'))[2:]
+    ret = ''
+    
+    for bit in bits:
+        if bit == '1':
+            if random.randrange(0,2):
+                ret += '01'
+            else:
+                ret += '10'
+        else:
+            ret += '00'
+    
+    return int_to_bytes(int(ret, base=2))
+
+def decode(s):
+    bits = bin(int.from_bytes(s, byteorder='big'))[2:]
+    if len(bits) % 2:
+        bits = '0' + bits
+
+    ret = ''
+
+    for i in range(0,len(bits)-1,2):
+        if int(bits[i] + bits[i+1],base=2):
+            ret += '1'
+        else:
+            ret += '0'
+
+    return int_to_bytes(int(ret, base=2))
+
+def encrypt(m):
+    nonce = urandom(8)
+
+    aes = AES.new(key=encryption_key, mode=AES.MODE_CTR,nonce=nonce)
+    tag = HMAC.new(key=mac_key, msg=m).digest()
+
+    return nonce + aes.encrypt(encode(m) + tag)
+
+def decrypt(c):
+    try:
+        aes = AES.new(key=encryption_key, mode=AES.MODE_CTR,nonce=c[:8])
+        
+        decrypted = aes.decrypt(c[8:])
+        message, tag = decode(decrypted[:-16]), decrypted[-16:]
+
+        HMAC.new(key=mac_key, msg=message).verify(mac_tag=tag)
+        return message
+    except ValueError:
+        print(""Get off my lawn or I call the police!!!"")
+        exit(1)
+
+def main():
+    try:
+        encrypted_password = base64.b64decode(input('Encrypted password>'))
+        password = decrypt(encrypted_password)
+        
+        if password == PASSWORD:
+            print(str(base64.b64encode(encrypt(FLAG)), 'utf-8'))
+        else:
+            print(""Wrong Password!!!"")
+    except:
+        exit(1)
+
+if __name__ == '__main__':
+    main()",Analyze the provided encryption and decryption script to understand the custom encoding and encryption process. Extract and reverse the encryption steps to recover the original password and flag.,"from Crypto.Cipher import AES
+from Crypto.Hash import HMAC, BLAKE2s
+from Crypto.Random import urandom
+import base64
+
+# Constants and setup
+PASSWORD = b'correctpassword'  # Replace with the actual password if known
+FLAG = b'ctf{your_flag_here}'  # Replace with the actual flag if known
+
+# Key derivation from PASSWORD
+def derive_keys(password):
+    encryption_key = BLAKE2s.new(data=password + b'encryption_key').digest()
+    mac_key = BLAKE2s.new(data=password + b'mac_key').digest()
+    return encryption_key, mac_key
+
+# Custom encoding and decoding functions
+def int_to_bytes(i):
+    return i.to_bytes((i.bit_length() + 7) // 8, byteorder='big')
+
+def encode(s):
+    bits = bin(int.from_bytes(s, byteorder='big'))[2:]
+    ret = ''
+    for bit in bits:
+        if bit == '1':
+            ret += '01' if urandom(1)[0] % 2 else '10'
+        else:
+            ret += '00'
+    return int_to_bytes(int(ret, base=2))
+
+def decode(s):
+    bits = bin(int.from_bytes(s, byteorder='big'))[2:]
+    bits = '0' + bits if len(bits) % 2 else bits
+    ret = ''
+    for i in range(0, len(bits)-1, 2):
+        ret += '1' if int(bits[i] + bits[i+1], base=2) else '0'
+    return int_to_bytes(int(ret, base=2))
+
+# Decryption function
+def decrypt(c, encryption_key, mac_key):
+    try:
+        aes = AES.new(key=encryption_key, mode=AES.MODE_CTR, nonce=c[:8])
+        decrypted = aes.decrypt(c[8:])
+        message, tag = decode(decrypted[:-16]), decrypted[-16:]
+        HMAC.new(key=mac_key, msg=message).verify(tag)
+        return message
+    except ValueError:
+        print(""Decryption failed!"")
+        exit(1)
+
+# Main function to simulate the decryption of an encrypted password
+def main():
+    encrypted_password = base64.b64decode(input('Encrypted password>'))
+    encryption_key, mac_key = derive_keys(PASSWORD)
+    password = decrypt(encrypted_password, encryption_key, mac_key)
+    
+    if password == PASSWORD:
+        encrypted_flag = base64.b64encode(encrypt(FLAG)).decode('utf-8')
+        print(encrypted_flag)
+    else:
+        print(""Wrong Password!!!"")
+
+if __name__ == '__main__':
+    main()
+",
+CTF020,Jumpy,2021,Reverse Engineering / Exploitation,Medium,ALLES,"This challenge involves interacting with a custom assembler that generates and executes machine code based on user input. The assembler supports a few instructions (mov, jmp, ret) and uses mmap to allocate executable memory. The task is to exploit this assembler to execute arbitrary code or gain unauthorized access to a flag.
+",Medium to High,"Knowledge of x86 machine code, memory management, and assembly language will be beneficial. Understanding how to manipulate jump targets and ensuring valid opcode execution are key.",,"#include <sys/mman.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdbool.h>
+#include <unistd.h>
+#include <stdlib.h>
+
+void ignore_me_init_buffering() {
+    setvbuf(stdout, NULL, _IONBF, 0);
+    setvbuf(stdin, NULL, _IONBF, 0);
+    setvbuf(stderr, NULL, _IONBF, 0);
+}
+
+typedef struct instruction_t
+{
+    char *mnemonic;
+    uint8_t opcode;
+} instruction_t;
+
+const uint8_t OP_RET = 0xc3;
+const uint8_t OP_SHORT_JMP = 0xeb;
+const uint8_t OP_MOV_EAX_IMM32 = 0xb8;
+
+const instruction_t INSNS[3] = {
+    {""ret"", OP_RET},
+    {""jmp"", OP_SHORT_JMP},
+    {""moveax"", OP_MOV_EAX_IMM32},
+};
+
+uint8_t *cursor;
+uint8_t *mem;
+
+void emit_opcode(uint8_t opcode)
+{
+    *cursor++ = opcode;
+}
+void emit_imm32()
+{
+    scanf(""%d"", (uint32_t *)cursor);
+    cursor += sizeof(uint32_t);
+}
+
+int8_t emit_imm8()
+{
+    scanf(""%hhd"", (int8_t *)cursor++);
+    return *(int8_t *)(cursor - 1);
+}
+
+const instruction_t *isns_by_mnemonic(char *mnemonic)
+{
+    for (int i = 0; i < sizeof(INSNS) / sizeof(INSNS[0]); i++)
+        if (!strcmp(mnemonic, INSNS[i].mnemonic))
+            return &INSNS[i];
+    return NULL;
+}
+
+bool is_supported_op(uint8_t op)
+{
+    for (int i = 0; i < sizeof(INSNS) / sizeof(INSNS[0]); i++)
+        if (op == INSNS[i].opcode)
+            return true;
+    return false;
+}
+
+int main(void)
+{
+    ignore_me_init_buffering();
+    printf(""this could have been a V8 patch...\n"");
+    printf(""... but V8 is quite the chungus ...\n"");
+    printf(""... so here's a small and useless assembler instead\n\n"");
+
+    mem = mmap((void*)0x1337000000, 0x1000, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    memset(mem, 0xc3, 0x1000);
+    cursor = mem;
+
+    printf(""supported insns:\n"");
+    printf(""- moveax $imm32\n"");
+    printf(""- jmp $imm8\n"");
+    printf(""- ret\n"");
+    printf(""- (EOF)\n"");
+    printf(""\n"");
+
+    uint8_t **jump_targets = NULL;
+    size_t jump_target_cnt = 0;
+
+    {
+        while (1)
+        {
+            printf(""> "");
+            char opcode[10] = {0};
+            scanf(""%9s"", opcode);
+            const instruction_t *insn = isns_by_mnemonic(opcode);
+            if (!insn)
+                break;
+
+            emit_opcode(insn->opcode);
+            switch (insn->opcode)
+            {
+            case OP_MOV_EAX_IMM32:
+                emit_imm32();
+                break;
+            case OP_SHORT_JMP:
+                jump_targets = reallocarray(jump_targets, ++jump_target_cnt, sizeof(jump_targets[0]));
+                int8_t imm = emit_imm8();
+                uint8_t *target = cursor + imm;
+                jump_targets[jump_target_cnt - 1] = target;
+                break;
+            case OP_RET:
+                break;
+            }
+        }
+    }
+
+    for (int i = 0; i < jump_target_cnt; i++)
+    {
+        if (!is_supported_op(*jump_targets[i]))
+        {
+            printf(""invalid jump target!\n"");
+            printf(""%02x [%02x] %02x\n"", *(jump_targets[i] - 1), *(jump_targets[i] + 0), *(jump_targets[i] + 1));
+            exit(1);
+        }
+    }
+
+    uint64_t (*code)() = (void *)mem;
+    mprotect(code, 0x1000, PROT_READ | PROT_EXEC);
+    printf(""\nrunning your code...\n"");
+    alarm(5);
+    printf(""result: 0x%lx\n"", code());
+}",Exploit the ability to specify jump targets to execute arbitrary code. Ensure jump targets are valid and adjust them to perform unexpected operations. Analyze the memory layout and how the assembler handles the code to craft a payload that can bypass the checks or perform a privileged operation.,"from pwn import *
+
+# Set up the process or remote connection to the challenge
+p = process('./jumpy')  # or remote('host', port) if running remotely
+
+# Interaction to craft the payload
+p.sendline(b""moveax"")       # Set up a mov instruction
+p.sendline(b""0x12345678"")   # Provide the immediate value for MOV EAX, imm32
+
+# Add jump instruction
+p.sendline(b""jmp"")          # Specify the jmp instruction
+p.sendline(b""0x00"")         # Provide the immediate offset for the jump (e.g., 0x00 or calculated offset)
+
+# Adding return instruction
+p.sendline(b""ret"")          # End the instructions with ret
+
+# Add EOF to terminate input
+p.sendline(b"""")
+
+# Leak the output and analyze
+output = p.recvall()
+print(output.decode())
+
+# Further analysis might be required to identify the flag or payload execution results
+",
