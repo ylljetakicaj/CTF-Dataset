@@ -1,0 +1,164 @@
+using System;
+using System.Collections.Generic;
+using System.Configuration;
+using System.Data.SqlClient;
+using System.Net.Mail;
+using Newtonsoft.Json.Linq;
+
+namespace KADAPI.Helpers
+{
+    public static class NotificationHelper
+    {
+        private static string connectionString = ConfigurationManager.ConnectionStrings["YourConnectionStringName"].ConnectionString;
+
+        public static void NotifyApproversFromJsonHipoteka(int hipotekaId)
+        {
+            var hipoteka = GetMortgageInfo(hipotekaId);
+            if (hipoteka == null)
+                return;
+
+            var user = GetUserInfo(hipoteka.UserId);
+            if (user == null)
+                return;
+
+            List<string> approvers = GetApproverEmails(user.Dega);
+            if (approvers.Count == 0)
+                return;
+
+            foreach (var email in approvers)
+            {
+                string subject = $"[KADAPI] {hipoteka.Lloji} - New Mortgage from {user.FullName}";
+                string body = $@"
+                    <html>
+                        <body style='font-family: Arial, sans-serif;'>
+                            <h3>New {hipoteka.Lloji} Request</h3>
+                            <p><b>Created by:</b> {user.FullName} (UserID: {user.UserId})</p>
+                            <p><b>Branch:</b> {user.Dega}</p>
+                            <p><b>Comment:</b> {hipoteka.Koment}</p>
+                            <p><b>Date:</b> {hipoteka.InsertDate}</p>
+                            {(string.IsNullOrEmpty(hipoteka.Details) ? "" : $"<p><b>Details:</b> {hipoteka.Details}</p>")}
+                            <br/>
+                            <p>Please review this request in the <b>KADAPI</b> system.</p>
+                        </body>
+                    </html>";
+
+                try
+                {
+                    SendEmail(email, subject, body);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Email to {email} failed: {ex.Message}");
+                }
+            }
+        }
+
+        private static (int UserId, string Lloji, string Koment, DateTime InsertDate, string Details)? GetMortgageInfo(int id)
+        {
+            using (SqlConnection conn = new SqlConnection(connectionString))
+            {
+                conn.Open();
+                string query = "SELECT Username, Lloji, Koment, InsertDate, JsonHipotekaString FROM JsonHipoteka WHERE Id = @Id";
+
+                using (SqlCommand cmd = new SqlCommand(query, conn))
+                {
+                    cmd.Parameters.AddWithValue("@Id", id);
+                    using (SqlDataReader reader = cmd.ExecuteReader())
+                    {
+                        if (reader.Read())
+                        {
+                            int userId = Convert.ToInt32(reader["Username"]);
+                            string lloji = reader["Lloji"].ToString();
+                            string koment = reader["Koment"].ToString();
+                            DateTime insertDate = Convert.ToDateTime(reader["InsertDate"]);
+                            string json = reader["JsonHipotekaString"].ToString();
+
+                            string details = "";
+                            try
+                            {
+                                var jObj = JObject.Parse(json);
+                                details = jObj["PropertyName"]?.ToString() ?? "";
+                            }
+                            catch { }
+
+                            return (userId, lloji, koment, insertDate, details);
+                        }
+                    }
+                }
+            }
+            return null;
+        }
+
+        private static (int UserId, string FullName, int Dega)? GetUserInfo(int userId)
+        {
+            using (SqlConnection conn = new SqlConnection(connectionString))
+            {
+                conn.Open();
+                string query = "SELECT userid, emridhembiemri, dega FROM Users WHERE userid = @userid";
+
+                using (SqlCommand cmd = new SqlCommand(query, conn))
+                {
+                    cmd.Parameters.AddWithValue("@userid", userId);
+                    using (SqlDataReader reader = cmd.ExecuteReader())
+                    {
+                        if (reader.Read())
+                        {
+                            int id = Convert.ToInt32(reader["userid"]);
+                            string fullName = reader["emridhembiemri"].ToString();
+                            int dega = Convert.ToInt32(reader["dega"]);
+                            return (id, fullName, dega);
+                        }
+                    }
+                }
+            }
+            return null;
+        }
+
+        private static List<string> GetApproverEmails(int branchId)
+        {
+            List<string> emails = new List<string>();
+            using (SqlConnection conn = new SqlConnection(connectionString))
+            {
+                conn.Open();
+                string query = "SELECT email FROM Users WHERE grupid = 5 AND dega = @dega";
+
+                using (SqlCommand cmd = new SqlCommand(query, conn))
+                {
+                    cmd.Parameters.AddWithValue("@dega", branchId);
+                    using (SqlDataReader reader = cmd.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            string email = reader["email"]?.ToString();
+                            if (!string.IsNullOrEmpty(email))
+                                emails.Add(email);
+                        }
+                    }
+                }
+            }
+            return emails;
+        }
+
+        private static void SendEmail(string toEmail, string subject, string body)
+        {
+            string smtpServer = "mail.yourcompany.local"; // Microsoft Exchange server
+
+            using (SmtpClient smtp = new SmtpClient(smtpServer))
+            {
+                smtp.UseDefaultCredentials = true;
+                smtp.DeliveryMethod = SmtpDeliveryMethod.Network;
+
+                MailMessage msg = new MailMessage
+                {
+                    From = new MailAddress("no-reply@yourcompany.com"),
+                    Subject = subject,
+                    Body = body,
+                    IsBodyHtml = true
+                };
+
+                msg.To.Add(toEmail);
+                smtp.Send(msg);
+            }
+        }
+    }
+}
