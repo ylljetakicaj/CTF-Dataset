@@ -1,6 +1,80 @@
+using System;
+using System.Net;
+using System.Net.Mail;
+using System.Threading.Tasks;
+using KADAPI.Klasat;
+
+namespace KADAPI.Format
+{
+    public partial class Default : System.Web.UI.Page
+    {
+        protected void Page_Load(object sender, EventArgs e)
+        {
+        }
+
+        protected async void btnSendTestEmail_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                await EmailNotifier.SendEmailAsync(
+                    fromEmail: "emri.yt@kompania.com",
+                    toEmail: "approver@kompania.com",
+                    subject: "Test Email Async nga KADAPI",
+                    body: "Ky është një test i dërgimit të email-it në mënyrë async.",
+                    smtpHost: "exchange.yourcompany.com",
+                    smtpPort: 25
+                );
+
+                Response.Write("<script>alert('Email u dërgua me sukses (Async)!');</script>");
+            }
+            catch (SmtpException ex)
+            {
+                Response.Write($"<script>alert('Gabim SMTP: {ex.StatusCode} - {ex.Message}');</script>");
+            }
+            catch (Exception ex)
+            {
+                Response.Write($"<script>alert('Gabim gjatë dërgimit: {ex.Message}');</script>");
+            }
+        }
+    }
+}
 
 
 
+
+using System;
+using System.Net;
+using System.Net.Mail;
+using System.Threading.Tasks;
+
+namespace KADAPI.Klasat
+{
+    public class EmailNotifier
+    {
+        public static Task SendEmailAsync(string fromEmail, string toEmail, string subject, string body, string smtpHost, int smtpPort)
+        {
+            // Task.Run përdoret për të bërë dërgimin e synchronous në thread tjetër
+            return Task.Run(() =>
+            {
+                MailMessage msg = new MailMessage();
+                msg.From = new MailAddress(fromEmail);
+                msg.To.Add(toEmail);
+                msg.Subject = subject;
+                msg.Body = body;
+                msg.IsBodyHtml = false;
+
+                SmtpClient smtp = new SmtpClient(smtpHost, smtpPort)
+                {
+                    UseDefaultCredentials = true, // Windows Auth
+                    Credentials = CredentialCache.DefaultNetworkCredentials,
+                    DeliveryMethod = SmtpDeliveryMethod.Network
+                };
+
+                smtp.Send(msg); // synchronous brenda Task.Run
+            });
+        }
+    }
+}
        
          
 
