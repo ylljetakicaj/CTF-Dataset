@@ -1,37 +1,3 @@
-<%@ Page Language="C#" AutoEventWireup="true" CodeBehind="ActivityLogs.aspx.cs" Inherits="KADAPI.Format.ActivityLogs" %>
-
-<!DOCTYPE html>
-<html>
-<head runat="server">
-    <title>Activity Logs</title>
-    <style>
-        body { font-family: Arial; margin: 30px; }
-        h2 { color: #2e5268; }
-        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
-        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-        th { background-color: #2e5268; color: white; }
-    </style>
-</head>
-<body>
-    <form id="form1" runat="server">
-        <h2>Activity Logs</h2>
-        <asp:GridView ID="GridViewLogs" runat="server" AutoGenerateColumns="False" AllowPaging="True" PageSize="15">
-            <Columns>
-                <asp:BoundField DataField="id" HeaderText="ID" />
-                <asp:BoundField DataField="id_b" HeaderText="Branch ID" />
-                <asp:BoundField DataField="id_api" HeaderText="API ID" />
-                <asp:BoundField DataField="api" HeaderText="API" />
-                <asp:BoundField DataField="useri" HeaderText="User" />
-                <asp:BoundField DataField="koha" HeaderText="Time" DataFormatString="{0:dd/MM/yyyy HH:mm}" />
-                <asp:BoundField DataField="koment" HeaderText="Comment" />
-            </Columns>
-        </asp:GridView>
-    </form>
-</body>
-</html>
-       
-         
-
 
 
 
