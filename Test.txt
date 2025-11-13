@@ -1,6 +1,177 @@
 
 
+<!DOCTYPE html>
+<html>
+<head runat="server">
+    <title>Activity Logs</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f7f9fc;
+            padding: 30px;
+        }
 
+        h2 {
+            color: #2e5268;
+            margin-bottom: 20px;
+        }
 
+        .filters {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .filters label {
+            font-weight: bold;
+            color: #2e5268;
+        }
+
+        .filters select {
+            padding: 6px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        .filters button {
+            background-color: #2e5268;
+            color: white;
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            background: white;
+            border-radius: 6px;
+            overflow: hidden;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        }
+
+        th, td {
+            padding: 10px 14px;
+            border-bottom: 1px solid #ddd;
+            text-align: left;
+        }
+
+        th {
+            background-color: #2e5268;
+            color: white;
+            text-transform: uppercase;
+            font-size: 13px;
+        }
+
+        tr:hover {
+            background-color: #f0f4f8;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+    </style>
+</head>
+<body>
+    <form id="form1" runat="server">
+        <div class="container">
+            <h2>Activity Logs</h2>
+
+            <div class="filters">
+                <label for="ddlDateRange">Koha:</label>
+                <asp:DropDownList ID="ddlDateRange" runat="server">
+                    <asp:ListItem Text="Të gjitha" Value="all" />
+                    <asp:ListItem Text="24 orët e fundit" Value="1" />
+                    <asp:ListItem Text="7 ditët e fundit" Value="7" />
+                    <asp:ListItem Text="30 ditët e fundit" Value="30" />
+                </asp:DropDownList>
+
+                <label for="ddlUser">Përdoruesi:</label>
+                <asp:DropDownList ID="ddlUser" runat="server" />
+
+                <asp:Button ID="btnFilter" runat="server" Text="Filtro" OnClick="btnFilter_Click" />
+            </div>
+
+            <asp:GridView ID="GridViewLogs" runat="server" AutoGenerateColumns="False" GridLines="None">
+                <Columns>
+                    <asp:BoundField DataField="id" HeaderText="ID" />
+                    <asp:BoundField DataField="id_b" HeaderText="Branch ID" />
+                    <asp:BoundField DataField="id_api" HeaderText="API ID" />
+                    <asp:BoundField DataField="api" HeaderText="API" />
+                    <asp:BoundField DataField="useri" HeaderText="User" />
+                    <asp:BoundField DataField="koha" HeaderText="Time" DataFormatString="{0:dd/MM/yyyy HH:mm}" />
+                    <asp:BoundField DataField="koment" HeaderText="Comment" />
+                </Columns>
+            </asp:GridView>
+        </div>
+    </form>
+</body>
+</html>
+
+private void LoadUsers()
+        {
+            using (SqlConnection conn = new SqlConnection(connStr))
+            using (SqlCommand cmd = new SqlCommand("SELECT DISTINCT useri FROM LOG ORDER BY useri", conn))
+            {
+                conn.Open();
+                SqlDataReader dr = cmd.ExecuteReader();
+                ddlUser.Items.Clear();
+                ddlUser.Items.Add(new System.Web.UI.WebControls.ListItem("Të gjithë", "all"));
+
+                while (dr.Read())
+                {
+                    ddlUser.Items.Add(new System.Web.UI.WebControls.ListItem(dr["useri"].ToString(), dr["useri"].ToString()));
+                }
+                dr.Close();
+            }
+        }
+
+        private void LoadLogs(string dateRange = "all", string user = "all")
+        {
+            string query = "SELECT id, id_b, id_api, api, useri, koha, koment FROM LOG WHERE 1=1";
+
+            if (dateRange != "all")
+            {
+                query += " AND koha >= DATEADD(DAY, -@days, GETDATE())";
+            }
+
+            if (user != "all")
+            {
+                query += " AND useri = @user";
+            }
+
+            query += " ORDER BY koha DESC";
+
+            using (SqlConnection conn = new SqlConnection(connStr))
+            using (SqlCommand cmd = new SqlCommand(query, conn))
+            {
+                if (dateRange != "all")
+                    cmd.Parameters.AddWithValue("@days", Convert.ToInt32(dateRange));
+
+                if (user != "all")
+                    cmd.Parameters.AddWithValue("@user", user);
+
+                conn.Open();
+                SqlDataAdapter da = new SqlDataAdapter(cmd);
+                DataTable dt = new DataTable();
+                da.Fill(dt);
+
+                GridViewLogs.DataSource = dt;
+                GridViewLogs.DataBind();
+            }
+        }
+
+        protected void btnFilter_Click(object sender, EventArgs e)
+        {
+            string selectedDateRange = ddlDateRange.SelectedValue;
+            string selectedUser = ddlUser.SelectedValue;
+
+            LoadLogs(selectedDateRange, selectedUser);
+        }
+    }
+}
 
 
