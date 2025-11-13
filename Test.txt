@@ -1,80 +1,34 @@
-using System;
-using System.Net;
-using System.Net.Mail;
-using System.Threading.Tasks;
-using KADAPI.Klasat;
+<%@ Page Language="C#" AutoEventWireup="true" CodeBehind="ActivityLogs.aspx.cs" Inherits="KADAPI.Format.ActivityLogs" %>
 
-namespace KADAPI.Format
-{
-    public partial class Default : System.Web.UI.Page
-    {
-        protected void Page_Load(object sender, EventArgs e)
-        {
-        }
-
-        protected async void btnSendTestEmail_Click(object sender, EventArgs e)
-        {
-            try
-            {
-                await EmailNotifier.SendEmailAsync(
-                    fromEmail: "emri.yt@kompania.com",
-                    toEmail: "approver@kompania.com",
-                    subject: "Test Email Async nga KADAPI",
-                    body: "Ky është një test i dërgimit të email-it në mënyrë async.",
-                    smtpHost: "exchange.yourcompany.com",
-                    smtpPort: 25
-                );
-
-                Response.Write("<script>alert('Email u dërgua me sukses (Async)!');</script>");
-            }
-            catch (SmtpException ex)
-            {
-                Response.Write($"<script>alert('Gabim SMTP: {ex.StatusCode} - {ex.Message}');</script>");
-            }
-            catch (Exception ex)
-            {
-                Response.Write($"<script>alert('Gabim gjatë dërgimit: {ex.Message}');</script>");
-            }
-        }
-    }
-}
-
-
-
-
-using System;
-using System.Net;
-using System.Net.Mail;
-using System.Threading.Tasks;
-
-namespace KADAPI.Klasat
-{
-    public class EmailNotifier
-    {
-        public static Task SendEmailAsync(string fromEmail, string toEmail, string subject, string body, string smtpHost, int smtpPort)
-        {
-            // Task.Run përdoret për të bërë dërgimin e synchronous në thread tjetër
-            return Task.Run(() =>
-            {
-                MailMessage msg = new MailMessage();
-                msg.From = new MailAddress(fromEmail);
-                msg.To.Add(toEmail);
-                msg.Subject = subject;
-                msg.Body = body;
-                msg.IsBodyHtml = false;
-
-                SmtpClient smtp = new SmtpClient(smtpHost, smtpPort)
-                {
-                    UseDefaultCredentials = true, // Windows Auth
-                    Credentials = CredentialCache.DefaultNetworkCredentials,
-                    DeliveryMethod = SmtpDeliveryMethod.Network
-                };
-
-                smtp.Send(msg); // synchronous brenda Task.Run
-            });
-        }
-    }
-}
+<!DOCTYPE html>
+<html>
+<head runat="server">
+    <title>Activity Logs</title>
+    <style>
+        body { font-family: Arial; margin: 30px; }
+        h2 { color: #2e5268; }
+        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+        th { background-color: #2e5268; color: white; }
+    </style>
+</head>
+<body>
+    <form id="form1" runat="server">
+        <h2>Activity Logs</h2>
+        <asp:GridView ID="GridViewLogs" runat="server" AutoGenerateColumns="False" AllowPaging="True" PageSize="15">
+            <Columns>
+                <asp:BoundField DataField="id" HeaderText="ID" />
+                <asp:BoundField DataField="id_b" HeaderText="Branch ID" />
+                <asp:BoundField DataField="id_api" HeaderText="API ID" />
+                <asp:BoundField DataField="api" HeaderText="API" />
+                <asp:BoundField DataField="useri" HeaderText="User" />
+                <asp:BoundField DataField="koha" HeaderText="Time" DataFormatString="{0:dd/MM/yyyy HH:mm}" />
+                <asp:BoundField DataField="koment" HeaderText="Comment" />
+            </Columns>
+        </asp:GridView>
+    </form>
+</body>
+</html>
        
          
 
