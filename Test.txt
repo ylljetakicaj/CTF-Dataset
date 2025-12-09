@@ -1,178 +1,66 @@
-1 Menaxhimi i Rrezikut 1.1 Qëllimi i dokumentit
-Qëllimi i këtij dokumenti është të përcaktojë procesin e identifikimit, vlerësimit dhe menaxhimit të rreziqeve që mund të ndikojnë në planifikimin, zhvillimin dhe dorëzimin e projektit. Dokumenti siguron qartësi për mënyrën se si ekipi i projektit duhet të parandalojë, monitorojë dhe reagojë ndaj rreziqeve me qëllim që projekti të përfundojë me sukses brenda afateve dhe buxhetit të planifikuar.
-1.2 Vlefshmëria e dokumentit
-Ky dokument është i vlefshëm gjatë gjithë ciklit të jetës së projektit, nga faza e analizës deri në fazën e mirëmbajtjes. Dokumenti duhet të rishikohet sa herë që shfaqet një rrezik i ri, ndryshim në kërkesa, ose devijim nga plani fillestar i projektit.
-1.3 Definimi i termave dhe shkurtesave
-CSRF Cross-Site Request Forgery DDoS Distributed Denial of Service GCP Google Cloud Platform
-ISP Internet Service Provider SLA Service Level Agreement SSD Solid State Drive
-SSL Secure Sockets Layer
-TLS Transport Layer Security UPS Uninterruptible Power Supply XSS Cross-Site Scripting
-1.4 Relacioni me dokumentet e tjera
-Ky dokument lidhet me udhëzimet dhe rregulloret e organizatave ndërkombëtare për vullnetarizmin dhe shkëmbimet kulturore, të cilat përcaktojnë praktikat e sigurta dhe transparente për lidhjen e udhëtarëve me mikpritës.
-Si dhe dokumentet:
-● Propozimin e projektit për Workaway.
-● Studimin e realizueshmërisë për Workaway.
- 
- Menaxhimi i rrezikut
-Menaxhimi i rrezikut për implementimin e sistemit për shkëmbime kulturore
-2 Menaxhimi i Rrezikut
-2.1 Rreziku nga mungesa e energjisë elektrike 2.1.1 Përshkrimi i këtij rreziku
-Mungesa e energjisë elektrike mund të shkaktojë ndërprerje të punës së ekipit, ndalim të serverëve të zhvillimit, humbje të të dhënave të papërpunuara dhe vonesa në realizimin e detyrave.
-2.1.2 Gjasa për ndodhjen e rrezikut
-Gjasa për ndodhjen e këtij rreziku varet nga ndërprerjet e rrjetit elektrik, moti i keq, mirëmbajtja e operatorit të energjisë ose defekte të papritura teknike. Prandaj gjasa vleresohet si mesatare.
-2.1.3 Ndikimi i rrezikut në projektin tonë
-Rreziku i mungesës së energjisë elektrike mund të shkaktojë:
-● Ndërprerje të menjëhershme të punës së ekipit.
-● Humbje të të dhënave nëse nuk janë ruajtur në mënyrë të sigurt.
-● Vonesa në dorëzimin e moduleve dhe integrimeve të planifikuara.
-● Reduktim të produktivitetit të ekipit dhe rritje të kohës së zgjidhjes së tasqeve kritike.
-2.1.4 Menyra e trajtimit të rrezikut
-Për të minimizuar ndikimin e mungesës së energjisë elektrike, do të merren masat e mëposhtme:
- ●
-● ● ●
-●
-2.2 2.2.1
-Përdorimi i UPS për pajisjet dhe serverët kryesorë për të siguruar vazhdimësinë e punës gjatë ndërprerjeve të shkurtra.
-Ruajtja e vazhdueshme e punës në Git/Cloud për të shmangur humbjen e të dhënave. Mundësimi i punës remote në rast ndërprerjeje të zgjatur të energjisë në zyrë. Përdorimi i serverëve cloud për modulet kritike, për të shmangur varësinë nga energjia lokale.
-Planifikimi i fleksibilitetit në afate dhe burime, duke siguruar që detyrat kritike të mos mbeten peng i ndërprerjes
-Rreziku nga mungesa e internetit Përshkrimi i këtij rreziku
-Mungesa e internetit mund të ndalojë komunikimin e ekipit të zhvillimit dhe serverëve. Kjo ndikon në sinkronizimin e të dhënave, dërgimin e kërkesave për testim, aksesin në cloud dhe komunikimin midis moduleve të sistemit.
-2.2.2 Gjasa për ndodhjen e rrezikut
-Gjasa vlerësohet si mesatare, pasi mungesat mund të shkaktohen nga:
-● Dëmtime të rrjetit nga faktorë mjedisorë ose fatkeqësi natyrore.
-● Ndërprerje të planifikuara nga ISP
-● Problemet teknike të pajisjeve rrjetore ose modem/router.
-2.2.3 Ndikimi i rrezikut në projektin tonë
-Sinkronizimi i modulëve dhe serverëve mund të ngadalësohet ose të ndërpritet, proceset e testimit dhe integrimit mund të vonohen, komunikimi brenda ekipit dhe me përdoruesit testues mund të ndërpritet, mund të ndodhin vonesa në dorëzimin e detyrave të planifikuara.
-2.2.4 Mënyra e trajtimit të rrezikut
- Faqe 6 /
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 
- Menaxhimi i rrezikut
-Menaxhimi i rrezikut për implementimin e sistemit për shkëmbime kulturore
-Sigurimi i dy ose më shumë ISP për zëvendësim të shpejtë në rast ndërprerjeje, ruajtja e të dhënave dhe punës në cloud, për të shmangur humbjen e informacionit gjatë ndërprerjes, aktivizimi i funksioneve të cache dhe sinkronizimit automatik që rifillon kur rikthehet interneti, mundësimi i punës remote në lokacione alternative ose përdorim i hotspot-eve të sigurta.
-2.3 Rreziku i dëmtimit fizik të pajisjeve 2.3.1 Përshkrimi i këtij rreziku
-Ekziston rreziku i dëmtimit fizik të serverëve, diskut SSD, pajisjet e administratorit.
-2.3.2 Gjasa për ndodhjen e rrezikut
-Dëmtimet fizike të pajisjeve nuk janë të shpeshta, por mund të ndodhin për shkak të mbingarkesës, faktorëve mjedisorë, energjisë elektrike ose defekteve të papritura.
-2.3.3 Ndikimi i rrezikut në projektin tonë
-Dëmton vazhdimësinë e shërbimit, ndikon në backup-et, rezervimet, verifikimin e llogarive dhe komunikimin brenda platformës. Mund të shkaktojë humbje të të dhënave dhe ndërprerje të operimit.
-2.3.4 Mënyra e trajtimit të rrezikut
-Implementimi i backup-it automatik, hostimi i serverëve redundant (mirroring), mirëmbajtje e vazhdueshme e pajisjeve dhe zëvendësim i shpejtë i pajisjeve të dëmtuara.
-2.4 Rreziku i anonimitetit 2.4.1 Përshkrimi i këtij rreziku
-Rreziku se mund të krijohen profile të rreme.
-2.4.2 Gjasa për ndodhjen e rrezikut
-Shumë përdorues mund të tentojnë të krijojnë profile të rreme, sidomos në platforma ndërkombëtare.
-2.4.3 Ndikimi i rrezikut në projektin tonë
-Rrezikon sigurinë e përdoruesve, krijon keqkuptime, dëmton procesin e rezervimeve, ul besueshmërinë e platformës dhe cenon funksionalitetet e verifikimit të identitetit.
-2.4.4 Mënyra e trajtimit të rrezikut
-Implementimi i verifikimit të detyruar me email dhe dokument identifikimi, përdorimi i algoritmeve për zbulim të profileve të dyshimta, monitorim nga stafi mbikëqyrës dhe aktivizimi i sistemit të raportimeve nga përdoruesit.
-2.5 Rreziku i kredibilitetit 2.5.1 Përshkrimi i këtij rreziku
-Çdo pasaktësi, keqinformim, mungesë verifikimi ose manipulim i vlerësimeve dhe komenteve mund të dëmtojë kredibilitetin e platformës.
-2.5.2 Gjasa për ndodhjen e rrezikut
-Në çdo platformë me vlerësime dhe ndërveprime të përdoruesve, ekziston rreziku i komenteve të rreme, keqinformimeve ose abuzimeve.
- 
- Menaxhimi i rrezikut
-Menaxhimi i rrezikut për implementimin e sistemit për shkëmbime kulturore
-2.5.3 Ndikimi i rrezikut në projektin tonë
-Ndikon drejtpërdrejt në tërheqjen dhe mbylljen e profileve të përdoruesve dhe mikpritësve, besueshmërinë e rezervimeve, sigurinë dhe reputacionin e platformës në nivel ndërkombëtar.
-2.5.4 Mënyra e trajtimit të rrezikut
-Vendosja e mekanizmave për moderimin e vlerësimeve, verifikim i profileve, algoritme për identifikimin e aktivitetit jo-normal, opsion raportimi dhe analizim manual nga stafi mbikëqyrës.
-2.6 Rreziku i privatësisë së të dhënave personale 2.6.1 Përshkrimi i këtij rreziku
-Sistemi përmban informacion të ndjeshëm të përdoruesve, si dokument identifikimi, email, vendodhje dhe historik rezervimesh. Ekziston rreziku që këto të dhëna të aksesohen pa autorizim, të humbasin ose të keqpërdoren nga persona të jashtëm ose brenda platformës.
-2.6.2 Gjasa për ndodhjen e rrezikut
-Mesatare. Sistemi është online dhe mund të jenë të ekspozuara të dhënat e përdoruesve në rast sulmesh kibernetike ose keqmenaxhimi i të dhënave.
-2.6.3 Ndikimi i rrezikut në projektin tonë
-I lartë. Një incident i tillë mund të çojë në humbje besueshmërie nga përdoruesit, probleme ligjore mbi mbrojtjen e të dhënave dhe kosto shtesë për rikuperimin e informacionit dhe përforcimin e sigurisë.
- 2.6.4
-● ● ● ●
-2.7 2.7.1
-Mënyra e trajtimit të rrezikut
-Implementimi i enkriptimit për të gjitha të dhënat personale. Kufizimi i aksesit bazuar në role dhe privilegje.
-Monitorim i vazhdueshëm i aktiviteteve të dyshimta. Testime të rregullta të sigurisë dhe auditime të brendshme.
-Rreziku nga gabimet e përdoruesve Përshkrimi i rrezikut
-Ky rrezik lidhet me gabimet që përdoruesit mund të bëjnë gjatë futjes së të dhënave, planifikimit ose ndarjes së detyrave.
-2.7.2 Gjasa e ndodhjes së rrezikut
-Probabiliteti që ky rrezik të shfaqet është i lartë, sidomos në fazat e para të përdorimit të sistemit ose kur mungon trajnim i mjaftueshëm.
-2.7.3 Ndikimi i rrezikut në projektin tonë
-Rreziku ndikon negativisht në organizimin e detyrave të mirëmbajtjes dhe mund të dërgoj në shfrytëzim joefikas të burimeve.
- Faqe 8 /
+class Program
+{
+    static async Task Main(string[] args)
+    {
+        string rootPath = @"C:\Clients";  // folders containing ClientID
+        string apiBaseUrl = "https://your-indoc-edge-api-url.com";
+        string username = "yourUsername";
+        string password = "yourPassword";
 
- Menaxhimi i rrezikut
-Menaxhimi i rrezikut për implementimin e sistemit për shkëmbime kulturore
-2.7.4 Trajtimi i rrezikut
-Për të ulur këtë rrezik, sigurohet ofrimi i trajnimeve të detajuara bazuar në nivelin aktual të njohurive të përdoruesve, si dhe implementimi i kontrolleve automatike për verifikimin e të dhënave.
-2.8 Rreziku i mungesës së përputhshmërisë me ligjet ndërkombëtare 2.8.1 Përshkrimi i rrezikut
-Sistemi lidhet me përdorues dhe host-e nga vende të ndryshme. Ekziston rreziku që sistemi të mos përputhet me ligjet lokale ose ndërkombëtare mbi mbrojtjen e të dhënave personale, të drejtat e punës vullnetare, tatimet ose rregulloret e sigurisë. Kjo mund të çojë në sanksione ligjore, pezullim të shërbimeve në disa vende ose humbje besueshmërie.
-2.8.2 Gjasa e ndodhjes së rrezikut
-Mesatare. Rreziku është i pranishëm, veçanërisht nëse nuk ka monitorim të vazhdueshëm ligjor dhe politika të azhurnuara për përdoruesit ndërkombëtarë.
-2.8.3 Ndikimi i rrezikut në projektin tonë
-I lartë. Mosrespektimi i ligjeve mund të shkaktojë gjoba, ndalime të shërbimeve në tregje të caktuara, humbje të reputacionit dhe besueshmërisë së platformës, si dhe kosto shtesë për rregullimin e pasojave.
- 2.8.4
-● ●
-● ●
-2.9 2.9.1
-Trajtimi i rrezikut
-Konsultime të rregullta me avokatë dhe ekspertë ligjorë për vendet ku operon platforma. Përditësimi i politikave të privatësisë dhe termave të përdorimit sipas ligjeve lokale dhe ndërkombëtare.
-Implementimi i procedurave dhe kontrolleve për pajtueshmëri ligjore gjatë regjistrimit të përdoruesve dhe operimit të platformës.
-Trajnim i stafit mbi aspektet ligjore dhe praktikat më të mira për përputhshmëri.
-Rreziku nga sulmet kibernetike Përshkrimi i këtij rreziku
-Ekziston mundësia që sistemi Workaway të sulmohet nga aktorë të jashtëm përmes sulmeve kibernetike, si p.sh. SQL Injection, XSS, CSRF, DDoS, ose përpjekje për të vjedhur të dhëna personale të përdoruesve.
-2.9.2 Gjasa për ndodhjen e rrezikut
-Mesatare. Duke pasur parasysh që sistemi do të jetë online dhe do të përmbajë të dhëna personale dhe profile të përdoruesve, mundësia e sulmeve është e pranishme, por mund të minimizohet me masat e duhura të sigurisë.
-2.9.3 Ndikimi i rrezikut në projektin tonë
-I lartë. Një sulm kibernetik mund të dërgoj në humbje të të dhënave, ndërprerje të shërbimit, humbje besueshmërie tek përdoruesit dhe kosto shtesë për rikuperim.
-2.9.4 Mënyra e trajtimit të rrezikut
+        var client = new InDocClient(apiBaseUrl, username, password);
 
- Menaxhimi i rrezikut
-Menaxhimi i rrezikut për implementimin e sistemit për shkëmbime kulturore
-● Implementimi i masave të sigurisë, përfshirë SSL/TLS, autentikim me dy faktorë, firewall dhe monitorim të vazhdueshëm.
-● Testime të sigurisë dhe auditime periodike.
-● Trajnim i stafit për praktikat më të mira të sigurisë.
-● Plan emergjence për rikuperim të të dhënave dhe vazhdimësi të shërbimit.
-2.10 Rreziku i ndryshimeve të kërkesave të përdoruesit 2.10.1 Përshkrimi i këtij rreziku
-Sistemi do të funksionojë sipas kërkesave fillestare, por gjatë mirëmbajtjes do të mbështeten vetëm ndryshimet thelbësore. Kërkesat jashtë marrëveshjes mund të refuzohen ose të kërkojnë kosto dhe rinegocim.
-2.10.2 Gjasa për ndodhjen e rrezikut
-Gjasa është mesatare, pasi nevojat dhe pritshmëritë e përdoruesve mund të ndryshojnë me kalimin e kohës.
-2.10.3 Ndikimi i rrezikut në projektin tonë
-Kërkesat e reja mund të rrisin kostot, të shkaktojnë vonesa dhe të ndikojnë në burimet e planifikuara për mirëmbajtje, duke krijuar pritshmëri të paqarta për përdoruesit.
-2.10.4 Mënyra e trajtimit të rrezikut
-● Trajtimi vetëm i ndryshimeve kritike.
-● Njoftimi i përdoruesve për kostot shtesë të kërkesave jashtë marrëveshjes.
-2.11 Rreziku i buxhetit 2.11.1 Përshkrimi i këtij rreziku
-Ekziston mundësia që shpenzimet për zhvillimin, infrastrukturën dhe mirëmbajtjen e sistemit të tejkalojnë buxhetin e parashikuar për projektin Workaway.
-2.11.2 Gjasa për ndodhjen e rrezikut
-Mesatare. Teknologjitë e reja, ndryshimet e kërkesave nga klienti ose vonesat në zhvillim mund të shkaktojnë rritje të kostove.
-2.11.3 Ndikimi i rrezikut në projektin tonë
-I lartë. Një tejkalim i buxhetit mund të çojë në vonesa në dorëzim, reduktim të funksionaliteteve ose nevojën për burime shtesë.
-2.11.4 Mënyra e trajtimit të rrezikut
-Planifikimi i hollësishëm i buxhetit dhe ndjekja e shpenzimeve në mënyrë të vazhdueshme. Përcaktimi i rezervave për emergjenca financiare.
-Komunikim i qartë me klientin për çdo ndryshim në kosto ose kërkesa shtesë.
-Përdorimi i metodave agile për të minimizuar vonesat dhe shpenzimet e panevojshme.
-2.12 Rreziku i përdorshmërisë ose performancës së sistemit
-2.12.1 Përshkrimi i këtij rreziku
-Ekziston mundësia që sistemi të ketë probleme në performancë, ngadalësim gjatë kërkimeve dhe rezervimeve ose në përdorshmëri, ndërfaqe jo-intuitive, navigim i vështirë për përdoruesit e rinj.
-  Faqe 10 /
+        foreach (var clientFolder in Directory.GetDirectories(rootPath))
+        {
+            string clientId = Path.GetFileName(clientFolder);
 
- Menaxhimi i rrezikut
-Menaxhimi i rrezikut për implementimin e sistemit për shkëmbime kulturore
-Kjo mund të ndodhë për shkak të optimizimit të dobët të kodit, strukturave të bazës së të dhënave ose dizajnit jo user friendly.
-2.12.2 Gjasa për ndodhjen e rrezikut
-Mesatare. Ndërfaqja dhe performanca varen nga mënyra se si zhvilluesit implementojnë front-end, back-end, dhe databazën. Probleme të vogla mund të shfaqen gjatë përdorimit masiv ose në pajisje të ndryshme.
-2.12.3 Ndikimi i rrezikut në projektin tonë
-I lartë. Nëse përdoruesit hasin vështirësi, kjo mund të ulë besueshmërinë dhe popullaritetin e platformës, të shkaktojë ankesa dhe të ndikojë negativisht në reputacionin e projektit.
-2.12.4 Mënyra e trajtimit të rrezikut
-Testime të gjera të përdorshmërisë (usability tests) dhe performancës para lançimit.
-Optimizim i kodit, queries të bazës së të dhënave dhe serverëve për të përmirësuar shpejtësinë. Sigurimi që ndërfaqja të jetë intuitive, responsive dhe e përshtatshme për desktop dhe pajisje mobile.
-Monitorim i performancës në kohë reale dhe përditësime të vazhdueshme për të rregulluar çdo problem që shfaqet.
-Mbledhje feedback nga përdoruesit dhe përmirësime periodike bazuar në sugjerimet e tyre.
-2.13 Rreziku i tejkalimit të afatit kohor
-2.13.1 Përshkrimi i këtij rreziku
-Proceset e zhvillimit, testimit ose implementimit mund të zgjasin më shumë se sa parashikohet për shkak të sfidave të papritura, mungesës së resurseve në kohë ose çështjeve teknike.
-2.13.2 Gjasa për ndodhjen e rrezikut
-Gjasa është mesatare, sidomos nëse planifikimi nuk është i detajuar ose nëse shfaqen ndryshime gjatë fazave të projektit.
-2.13.3 Ndikimi i rrezikut në projektin tonë
-Vonesat në afatet kohore mund të shtyjnë lançimin e sistemit, të shkaktojnë kosto shtesë dhe të ndikojnë negativisht në besueshmërinë e ekipit.
-2.13.4 Mënyra e trajtimit të rrezikut
-● Vendosja e afateve të realizueshme me hapësirë rezervë për vonesa të mundshme. ● Monitorim i rregullt i ecurisë së projektit për të identifikuar devijimet në kohë.
-● Angazhimi i burimeve shtesë në fazat kritike, kur kërkohet.
-Fundi i dokumentit
+            // Get the two documents inside the folder
+            var files = Directory.GetFiles(clientFolder);
+
+            foreach (var file in files)
+            {
+                var (name, surname) = ExtractNameSurname(file);
+                Console.WriteLine($"Processing {clientId} → {name} {surname}");
+
+                // 1. Create Case Folder
+                var caseFolderId = await client.CreateCaseFolderAsync(
+                    clientId, name, surname
+                );
+
+                if (caseFolderId == null)
+                {
+                    Console.WriteLine("❌ Failed to create case folder.");
+                    continue;
+                }
+
+                // 2. Upload Document
+                bool uploaded = await client.UploadDocumentAsync(caseFolderId, file);
+
+                if (uploaded)
+                    Console.WriteLine("✔ Document uploaded successfully\n");
+                else
+                    Console.WriteLine("❌ Document upload failed\n");
+            }
+        }
+
+        Console.WriteLine("---- FINISHED ----");
+    }
+
+    static (string Name, string Surname) ExtractNameSurname(string filePath)
+    {
+        // Example:
+        // 17013222_FILAN_FISTEKU_Contract-17013222_Signed.pdf
+        string fileName = Path.GetFileNameWithoutExtension(filePath);
+
+        var match = Regex.Match(fileName, @"^\d+_([A-Za-z]+)_([A-Za-z]+)_");
+
+        if (match.Success)
+            return (match.Groups[1].Value, match.Groups[2].Value);
+
+        return ("Unknown", "Unknown");
+    }
+}
