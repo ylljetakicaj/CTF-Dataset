@@ -1,7 +1,11 @@
 using System;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Web.Script.Serialization;
+using System.Text;
 using System.Collections.Generic;
 
-// CREATE FOLDER REQUEST
+// Models (simplified for case folder)
 public class CreateFolderModel
 {
     public string ParentId { get; set; }
@@ -18,33 +22,25 @@ public class CreateFolderModel
     public string ReasonType { get; set; }
 }
 
-// METADATA ROOT
 public class Metadata
 {
     public List<MetadataItem> Items { get; set; }
 }
 
-// METADATA ITEM (TEXT or COMPOSITE)
 public class MetadataItem
 {
     public string DataType { get; set; }
     public string Key { get; set; }
     public string Name { get; set; }
-
-    // For "Text" metadata items
     public string Text { get; set; }
-
-    // For "Composite" metadata items
     public CompositeMetadata Composite { get; set; }
 }
 
-// COMPOSITE METADATA
 public class CompositeMetadata
 {
     public List<CompositeItem> Items { get; set; }
 }
 
-// COMPOSITE SUB ITEM
 public class CompositeItem
 {
     public string DataType { get; set; }
@@ -53,40 +49,82 @@ public class CompositeItem
     public string Text { get; set; }
 }
 
-// CREATE FOLDER RESPONSE
-public class CreateFolderResponse
+class Program
 {
-    public string Id { get; set; }
-    public string Key { get; set; }
-    public string Status { get; set; }
-}
+    static void Main()
+    {
+        string baseUrl = "https://your-indoc-edge-api-url";
+        string username = "YOUR_USERNAME";
+        string password = "YOUR_PASSWORD";
 
-// DOCUMENT UPLOAD REQUEST
-public class DocumentUploadRequest
-{
-    public string FileName { get; set; }
-    public string MimeType { get; set; }
-    public byte[] FileBytes { get; set; }
+        HttpClient client = new HttpClient();
+        client.BaseAddress = new Uri(baseUrl);
 
-    public string ClientId { get; set; }
-    public string ClientName { get; set; }
-}
+        // Basic Authentication
+        string basicAuth = Convert.ToBase64String(Encoding.ASCII.GetBytes(username + ":" + password));
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", basicAuth);
 
-// DOCUMENT UPLOAD RESPONSE
-public class DocumentUploadResponse
-{
-    public string DocumentId { get; set; }
-    public string Status { get; set; }
-}
+        // Prepare case folder
+        var folder = new CreateFolderModel
+        {
+            ParentId = "CLNT_PI",
+            Key = "CLNT_PI_1234567",
+            Name = "1234567",
+            DocumentTypeId = "CLNT",
+            Metadata = new Metadata
+            {
+                Items = new List<MetadataItem>
+                {
+                    new MetadataItem { DataType = "Text", Key = "CLNTID", Name = "Client ID", Text = "1234567" },
+                    new MetadataItem { DataType = "Text", Key = "NAME", Name = "Name", Text = "Filan" },
+                    new MetadataItem { DataType = "Text", Key = "SRNM", Name = "Surname", Text = "Fisteku" },
+                    new MetadataItem { DataType = "Text", Key = "CLNTTYP", Name = "Client type", Text = "PI" },
+                    new MetadataItem
+                    {
+                        DataType = "Composite",
+                        Key = "DCMTCDANDTTL",
+                        Name = "Document code and title",
+                        Composite = new CompositeMetadata
+                        {
+                            Items = new List<CompositeItem>
+                            {
+                                new CompositeItem { DataType = "Text", Key = "CODE", Name = "Code", Text = "3" },
+                                new CompositeItem { DataType = "Text", Key = "TTL", Name = "Title", Text = "Consent for access and processing of personal data" }
+                            }
+                        }
+                    }
+                }
+            },
+            IsCaseFolder = "true",
+            AllowedDocumentTypes = new[] { "CLNT" },
+            RenameIfExists = "true",
+            OnBehalfOf = "Filan Fisteku",
+            ReasonCode = "VPGL",
+            ReasonBody = "Creating new case folder",
+            ReasonType = "Administration"
+        };
 
-// LOGIN REQUEST/RESPONSE FOR BASIC AUTH
-public class LoginRequest
-{
-    public string Username { get; set; }
-    public string Password { get; set; }
-}
+        // Serialize
+        var serializer = new JavaScriptSerializer();
+        string json = serializer.Serialize(folder);
 
-public class LoginResponse
-{
-    public string Token { get; set; }
+        // Send POST
+        var content = new StringContent(json, Encoding.UTF8, "application/json");
+        HttpResponseMessage response = client.PostAsync("/api/casefolder/create", content).Result;
+
+        if (response.IsSuccessStatusCode)
+        {
+            string respJson = response.Content.ReadAsStringAsync().Result;
+            Console.WriteLine("Folder created successfully:");
+            Console.WriteLine(respJson);
+        }
+        else
+        {
+            Console.WriteLine("Failed to create folder:");
+            Console.WriteLine(response.StatusCode);
+            Console.WriteLine(response.Content.ReadAsStringAsync().Result);
+        }
+
+        Console.WriteLine("Done.");
+    }
 }
