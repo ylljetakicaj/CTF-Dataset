@@ -1,63 +1,15 @@
 using System;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Text;
-using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using System.Text.RegularExpressions;
-using System.Runtime.Serialization.Json;
 
-// ---------------------- Models ----------------------
-public class CreateFolderModel
-{
-    public string ParentId { get; set; }
-    public string Key { get; set; }
-    public string Name { get; set; }
-    public string DocumentTypeId { get; set; }
-    public Metadata Metadata { get; set; }
-    public string IsCaseFolder { get; set; }
-    public string[] AllowedDocumentTypes { get; set; }
-    public string RenameIfExists { get; set; }
-    public string OnBehalfOf { get; set; }
-    public string ReasonCode { get; set; }
-    public string ReasonBody { get; set; }
-    public string ReasonType { get; set; }
-}
-
-public class Metadata
-{
-    public List<MetadataItem> Items { get; set; }
-}
-
-public class MetadataItem
-{
-    public string DataType { get; set; }
-    public string Key { get; set; }
-    public string Name { get; set; }
-    public string Text { get; set; }
-    public CompositeMetadata Composite { get; set; }
-}
-
-public class CompositeMetadata
-{
-    public List<CompositeItem> Items { get; set; }
-}
-
-public class CompositeItem
-{
-    public string DataType { get; set; }
-    public string Key { get; set; }
-    public string Name { get; set; }
-    public string Text { get; set; }
-}
-
-// ---------------------- Program ----------------------
 class Program
 {
     static void Main()
     {
-        // Environment variables
-        string apiUrl = "https://your-api-url";  // replace
+        string apiUrl = "https://your-api-url";  // replace with your API URL
         string username = "YOUR_USERNAME";       // replace
         string password = "YOUR_PASSWORD";       // replace
         string clientsRootFolder = @"C:\Clients"; // replace with your folder path
@@ -80,6 +32,8 @@ class Program
             if (pdfFiles.Length == 0) continue;
 
             string firstFileName = Path.GetFileNameWithoutExtension(pdfFiles[0]);
+
+            // Example filename: 17013222_FILAN_FISTEKU_Contract
             string pattern = @"^\d+_([A-Z]+)_([A-Z]+)_";
             Match match = Regex.Match(firstFileName, pattern);
             string firstName = "Unknown";
@@ -90,60 +44,33 @@ class Program
                 lastName = match.Groups[2].Value;
             }
 
-            // Prepare folder object
-            var folder = new CreateFolderModel
-            {
-                ParentId = "CLNT_PI",
-                Key = "CLNT_PI_" + clientId,
-                Name = clientId,
-                DocumentTypeId = "CLNT",
-                Metadata = new Metadata
-                {
-                    Items = new List<MetadataItem>
-                    {
-                        new MetadataItem { DataType = "Text", Key = "CLNTID", Name = "Client ID", Text = clientId },
-                        new MetadataItem { DataType = "Text", Key = "NAME", Name = "Name", Text = firstName },
-                        new MetadataItem { DataType = "Text", Key = "SRNM", Name = "Surname", Text = lastName },
-                        new MetadataItem { DataType = "Text", Key = "CLNTTYP", Name = "Client type", Text = "PI" },
-                        new MetadataItem
-                        {
-                            DataType = "Composite",
-                            Key = "DCMTCDANDTTL",
-                            Name = "Document code and title",
-                            Composite = new CompositeMetadata
-                            {
-                                Items = new List<CompositeItem>
-                                {
-                                    new CompositeItem { DataType = "Text", Key = "CODE", Name = "Code", Text = "3" },
-                                    new CompositeItem { DataType = "Text", Key = "TTL", Name = "Title", Text = "Consent for access and processing of personal data" }
-                                }
-                            }
-                        }
-                    }
-                },
-                IsCaseFolder = "true",
-                AllowedDocumentTypes = new[] { "CLNT" },
-                RenameIfExists = "true",
-                OnBehalfOf = firstName + " " + lastName,
-                ReasonCode = "VPGL",
-                ReasonBody = "Creating new case folder",
-                ReasonType = "Administration"
-            };
+            // -------------------- Manual JSON --------------------
+            string json = "{";
+            json += "\"ParentId\":\"CLNT_PI\",";
+            json += "\"Key\":\"CLNT_PI_" + clientId + "\",";
+            json += "\"Name\":\"" + clientId + "\",";
+            json += "\"DocumentTypeId\":\"CLNT\",";
+            json += "\"Metadata\":{ \"Items\":[";
+            json += "{\"DataType\":\"Text\",\"Key\":\"CLNTID\",\"Name\":\"Client ID\",\"Text\":\"" + clientId + "\"},";
+            json += "{\"DataType\":\"Text\",\"Key\":\"NAME\",\"Name\":\"Name\",\"Text\":\"" + firstName + "\"},";
+            json += "{\"DataType\":\"Text\",\"Key\":\"SRNM\",\"Name\":\"Surname\",\"Text\":\"" + lastName + "\"},";
+            json += "{\"DataType\":\"Text\",\"Key\":\"CLNTTYP\",\"Name\":\"Client type\",\"Text\":\"PI\"},";
+            json += "{\"DataType\":\"Composite\",\"Key\":\"DCMTCDANDTTL\",\"Name\":\"Document code and title\",";
+            json += "\"Composite\":{\"Items\":[";
+            json += "{\"DataType\":\"Text\",\"Key\":\"CODE\",\"Name\":\"Code\",\"Text\":\"3\"},";
+            json += "{\"DataType\":\"Text\",\"Key\":\"TTL\",\"Name\":\"Title\",\"Text\":\"Consent for access and processing of personal data\"}";
+            json += "]}}";
+            json += "]},"; // end metadata
+            json += "\"IsCaseFolder\":\"true\",";
+            json += "\"AllowedDocumentTypes\":[\"CLNT\"],";
+            json += "\"RenameIfExists\":\"true\",";
+            json += "\"OnBehalfOf\":\"" + firstName + " " + lastName + "\",";
+            json += "\"ReasonCode\":\"VPGL\",";
+            json += "\"ReasonBody\":\"Creating new case folder\",";
+            json += "\"ReasonType\":\"Administration\"";
+            json += "}";
 
-            // Serialize using DataContractJsonSerializer
-            string json;
-            using (var ms = new MemoryStream())
-            {
-                var serializer = new DataContractJsonSerializer(typeof(CreateFolderModel));
-                serializer.WriteObject(ms, folder);
-                ms.Position = 0;
-                using (var sr = new StreamReader(ms))
-                {
-                    json = sr.ReadToEnd();
-                }
-            }
-
-            // Send POST request
+            // -------------------- POST Request --------------------
             var content = new StringContent(json, Encoding.UTF8, "application/json");
             HttpResponseMessage response = client.PostAsync("/api/casefolder/create", content).Result;
 
