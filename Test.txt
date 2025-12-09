@@ -1,6 +1,9 @@
 using System.Collections.Generic;
 using System.Runtime.Serialization;
 
+// -----------------------------------------------------------
+// CREATE FOLDER REQUEST
+// -----------------------------------------------------------
 [DataContract]
 public class CreateFolderModel
 {
@@ -18,17 +21,104 @@ public class CreateFolderModel
     [DataMember] public string ReasonType { get; set; }
 }
 
+// -----------------------------------------------------------
+// METADATA ROOT
+// -----------------------------------------------------------
 [DataContract]
 public class Metadata
 {
     [DataMember] public List<MetadataItem> Items { get; set; }
 }
 
+// -----------------------------------------------------------
+// METADATA ITEM (TEXT or COMPOSITE)
+// -----------------------------------------------------------
 [DataContract]
 public class MetadataItem
 {
     [DataMember] public string DataType { get; set; }
     [DataMember] public string Key { get; set; }
     [DataMember] public string Name { get; set; }
-    [DataMember(EmitDefaultValue = false)] public string Text { get; set; }
+
+    // For "Text" metadata items
+    [DataMember(EmitDefaultValue = false)] 
+    public string Text { get; set; }
+
+    // For "Composite" metadata items
+    [DataMember(EmitDefaultValue = false)] 
+    public CompositeMetadata Composite { get; set; }
+}
+
+// -----------------------------------------------------------
+// COMPOSITE METADATA
+// -----------------------------------------------------------
+[DataContract]
+public class CompositeMetadata
+{
+    [DataMember] public List<CompositeItem> Items { get; set; }
+}
+
+// -----------------------------------------------------------
+// COMPOSITE SUB ITEM
+// -----------------------------------------------------------
+[DataContract]
+public class CompositeItem
+{
+    [DataMember] public string DataType { get; set; }
+    [DataMember] public string Key { get; set; }
+    [DataMember] public string Name { get; set; }
+
+    [DataMember(EmitDefaultValue = false)] 
+    public string Text { get; set; }
+}
+
+// -----------------------------------------------------------
+// CREATE FOLDER RESPONSE
+// -----------------------------------------------------------
+[DataContract]
+public class CreateFolderResponse
+{
+    [DataMember] public string Id { get; set; }
+    [DataMember] public string Key { get; set; }
+    [DataMember] public string Status { get; set; }
+}
+
+// -----------------------------------------------------------
+// DOCUMENT UPLOAD REQUEST
+// -----------------------------------------------------------
+[DataContract]
+public class DocumentUploadRequest
+{
+    [DataMember] public string FileName { get; set; }
+    [DataMember] public string MimeType { get; set; }
+    [DataMember] public byte[] FileBytes { get; set; }
+
+    [DataMember] public string ClientId { get; set; }
+    [DataMember] public string ClientName { get; set; }
+}
+
+// -----------------------------------------------------------
+// DOCUMENT UPLOAD RESPONSE
+// -----------------------------------------------------------
+[DataContract]
+public class DocumentUploadResponse
+{
+    [DataMember] public string DocumentId { get; set; }
+    [DataMember] public string Status { get; set; }
+}
+
+// -----------------------------------------------------------
+// LOGIN REQUEST/RESPONSE FOR BASIC AUTH
+// -----------------------------------------------------------
+[DataContract]
+public class LoginRequest
+{
+    [DataMember] public string Username { get; set; }
+    [DataMember] public string Password { get; set; }
+}
+
+[DataContract]
+public class LoginResponse
+{
+    [DataMember] public string Token { get; set; }
 }
