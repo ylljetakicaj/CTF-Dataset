@@ -1,77 +1,71 @@
-using System.Net.Http.Headers;
-using System.Text;
-using System.Text.Json;
+using Newtonsoft.Json.Linq;
+using System;
+using System.IO;
+using System.Net.Http;
+using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 
-public class InDocClient
+class Program
 {
-    private readonly HttpClient _http;
-
-    public InDocClient(string baseUrl, string username, string password)
+    static void Main(string[] args)
     {
-        _http = new HttpClient();
-        _http.BaseAddress = new Uri(baseUrl);
-
-        var byteArray = Encoding.ASCII.GetBytes($"{username}:{password}");
-        _http.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Basic", Convert.ToBase64String(byteArray));
+        Run().Wait();
     }
 
-    public async Task<string?> CreateCaseFolderAsync(string clientId, string name, string surname)
+    static async Task Run()
     {
-        var body = new
+        string rootPath = @"C:\Clients";
+        string apiBaseUrl = "https://your-indoc-edge-api-url.com";
+        string username = "yourUsername";
+        string password = "yourPassword";
+
+        InDocClient client = new InDocClient(apiBaseUrl, username, password);
+
+        foreach (string clientFolder in Directory.GetDirectories(rootPath))
         {
-            ParentId = "CLNT_PI",
-            Key = $"CLNT_PI_{clientId}",
-            Name = clientId,
-            DocumentTypeId = "CLNT",
-            Metadata = new
+            string clientId = Path.GetFileName(clientFolder);
+            string[] files = Directory.GetFiles(clientFolder);
+
+            foreach (string file in files)
             {
-                Items = new object[]
+                Tuple<string, string> nameData = ExtractNameSurname(file);
+                string name = nameData.Item1;
+                string surname = nameData.Item2;
+
+                Console.WriteLine("Processing " + clientId + " → " + name + " " + surname);
+
+                // 1. Create case folder
+                string caseFolderId = await client.CreateCaseFolderAsync(clientId, name, surname);
+
+                if (caseFolderId == null)
                 {
-                    new {
-                        DataType = "Text", Key = "CLNTID", Name = "Client ID", Text = clientId
-                    },
-                    new {
-                        DataType = "Text", Key = "NAME", Name = "Name", Text = name
-                    },
-                    new {
-                        DataType = "Text", Key = "SRNM", Name = "Surname", Text = surname
-                    }
+                    Console.WriteLine("❌ Failed to create case folder");
+                    continue;
                 }
-            },
-            IsCaseFolder = "true",
-            AllowedDocumentTypes = new[] { "CLNT" },
-            RenameIfExists = "true",
-            OnBehalfOf = $"{name} {surname}",
-            ReasonCode = "VPGL",
-            ReasonBody = "Creating new case folder",
-            ReasonType = "Administration"
-        };
 
-        string json = JsonSerializer.Serialize(body);
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
+                // 2. Upload the document
+                bool ok = await client.UploadDocumentAsync(caseFolderId, file);
 
-        var response = await _http.PostAsync("/api/casefolder/create", content);
+                if (ok)
+                    Console.WriteLine("✔ Document uploaded successfully\n");
+                else
+                    Console.WriteLine("❌ Failed to upload document\n");
+            }
+        }
 
-        if (!response.IsSuccessStatusCode)
-            return null;
-
-        var result = await response.Content.ReadAsStringAsync();
-        using var doc = JsonDocument.Parse(result);
-
-        return doc.RootElement.GetProperty("Id").GetString();
+        Console.WriteLine("---- FINISHED ----");
     }
 
-    public async Task<bool> UploadDocumentAsync(string caseFolderId, string filePath)
+    static Tuple<string, string> ExtractNameSurname(string filePath)
     {
-        using var form = new MultipartFormDataContent();
-        var bytes = await File.ReadAllBytesAsync(filePath);
+        string fileName = Path.GetFileNameWithoutExtension(filePath);
 
-        form.Add(new ByteArrayContent(bytes), "file", Path.GetFileName(filePath));
-        form.Add(new StringContent(caseFolderId), "CaseFolderId");
+        // Example: 17013222_FILAN_FISTEKU_Contract-17013222_Signed.pdf
+        Match m = Regex.Match(fileName, @"^\d+_([A-Za-z]+)_([A-Za-z]+)_");
 
-        var response = await _http.PostAsync("/api/documents/upload", form);
+        if (m.Success)
+            return Tuple.Create(m.Groups[1].Value, m.Groups[2].Value);
 
-        return response.IsSuccessStatusCode;
+        return Tuple.Create("Unknown", "Unknown");
     }
 }
