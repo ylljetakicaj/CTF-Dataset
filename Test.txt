@@ -1,94 +1,34 @@
-using System;
-using System.IO;
-using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Runtime.Serialization.Json;
-using System.Text;
-using System.Threading.Tasks;
 using System.Collections.Generic;
+using System.Runtime.Serialization;
 
-public class InDocClient
+[DataContract]
+public class CreateFolderModel
 {
-    private readonly HttpClient _http;
+    [DataMember] public string ParentId { get; set; }
+    [DataMember] public string Key { get; set; }
+    [DataMember] public string Name { get; set; }
+    [DataMember] public string DocumentTypeId { get; set; }
+    [DataMember] public Metadata Metadata { get; set; }
+    [DataMember] public string IsCaseFolder { get; set; }
+    [DataMember] public string[] AllowedDocumentTypes { get; set; }
+    [DataMember] public string RenameIfExists { get; set; }
+    [DataMember] public string OnBehalfOf { get; set; }
+    [DataMember] public string ReasonCode { get; set; }
+    [DataMember] public string ReasonBody { get; set; }
+    [DataMember] public string ReasonType { get; set; }
+}
 
-    public InDocClient(string baseUrl, string username, string password)
-    {
-        _http = new HttpClient();
-        _http.BaseAddress = new Uri(baseUrl);
+[DataContract]
+public class Metadata
+{
+    [DataMember] public List<MetadataItem> Items { get; set; }
+}
 
-        string basicAuth = Convert.ToBase64String(Encoding.ASCII.GetBytes(username + ":" + password));
-        _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", basicAuth);
-    }
-
-    private string Serialize(object obj)
-    {
-        using (var ms = new MemoryStream())
-        {
-            var serializer = new DataContractJsonSerializer(obj.GetType());
-            serializer.WriteObject(ms, obj);
-            return Encoding.UTF8.GetString(ms.ToArray());
-        }
-    }
-
-    public async Task<string> CreateCaseFolderAsync(string clientId, string name, string surname)
-    {
-        var payload = new CreateFolderModel
-        {
-            ParentId = "CLNT_PI",
-            Key = "CLNT_PI_" + clientId,
-            Name = clientId,
-            DocumentTypeId = "CLNT",
-            Metadata = new Metadata
-            {
-                Items = new List<MetadataItem>
-                {
-                    new MetadataItem { DataType = "Text", Key = "CLNTID", Name = "Client ID", Text = clientId },
-                    new MetadataItem { DataType = "Text", Key = "NAME", Name = "Name", Text = name },
-                    new MetadataItem { DataType = "Text", Key = "SRNM", Name = "Surname", Text = surname }
-                }
-            },
-            IsCaseFolder = "true",
-            AllowedDocumentTypes = new[] { "CLNT" },
-            RenameIfExists = "true",
-            OnBehalfOf = name + " " + surname,
-            ReasonCode = "VPGL",
-            ReasonBody = "Creating new case folder",
-            ReasonType = "Administration"
-        };
-
-        string json = Serialize(payload);
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-        var response = await _http.PostAsync("/api/casefolder/create", content);
-
-        if (!response.IsSuccessStatusCode)
-            return null;
-
-        string responseJson = await response.Content.ReadAsStringAsync();
-
-        // Very lightweight manual extraction:
-        int start = responseJson.IndexOf("\"Id\":\"");
-        if (start == -1) return null;
-
-        start += 6;
-        int end = responseJson.IndexOf("\"", start);
-
-        return responseJson.Substring(start, end - start);
-    }
-
-    public async Task<bool> UploadDocumentAsync(string caseFolderId, string filePath)
-    {
-        var form = new MultipartFormDataContent();
-
-        byte[] data = File.ReadAllBytes(filePath);
-        var fileContent = new ByteArrayContent(data);
-        fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse("application/pdf");
-
-        form.Add(fileContent, "file", Path.GetFileName(filePath));
-        form.Add(new StringContent(caseFolderId), "CaseFolderId");
-
-        var response = await _http.PostAsync("/api/documents/upload", form);
-
-        return response.IsSuccessStatusCode;
-    }
+[DataContract]
+public class MetadataItem
+{
+    [DataMember] public string DataType { get; set; }
+    [DataMember] public string Key { get; set; }
+    [DataMember] public string Name { get; set; }
+    [DataMember(EmitDefaultValue = false)] public string Text { get; set; }
 }
