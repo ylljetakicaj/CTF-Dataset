@@ -4,8 +4,10 @@ using System.Net.Http.Headers;
 using System.Web.Script.Serialization;
 using System.Text;
 using System.Collections.Generic;
+using System.IO;
+using System.Text.RegularExpressions;
 
-// Models (simplified for case folder)
+// ---------------------- Models ----------------------
 public class CreateFolderModel
 {
     public string ParentId { get; set; }
@@ -49,13 +51,15 @@ public class CompositeItem
     public string Text { get; set; }
 }
 
+// ---------------------- Program ----------------------
 class Program
 {
     static void Main()
     {
-        string baseUrl = "https://your-indoc-edge-api-url";
-        string username = "YOUR_USERNAME";
-        string password = "YOUR_PASSWORD";
+        string baseUrl = "https://your-indoc-edge-api-url"; // replace with real URL
+        string username = "YOUR_USERNAME"; // replace with your username
+        string password = "YOUR_PASSWORD"; // replace with your password
+        string mainFolder = @"C:\Clients"; // folder containing client folders
 
         HttpClient client = new HttpClient();
         client.BaseAddress = new Uri(baseUrl);
@@ -64,65 +68,88 @@ class Program
         string basicAuth = Convert.ToBase64String(Encoding.ASCII.GetBytes(username + ":" + password));
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", basicAuth);
 
-        // Prepare case folder
-        var folder = new CreateFolderModel
+        string[] clientFolders = Directory.GetDirectories(mainFolder);
+
+        foreach (string folderPath in clientFolders)
         {
-            ParentId = "CLNT_PI",
-            Key = "CLNT_PI_1234567",
-            Name = "1234567",
-            DocumentTypeId = "CLNT",
-            Metadata = new Metadata
+            string clientId = new DirectoryInfo(folderPath).Name;
+
+            // Assume first PDF file contains name and surname
+            string[] pdfFiles = Directory.GetFiles(folderPath, "*.pdf");
+            if (pdfFiles.Length == 0) continue;
+
+            string firstFileName = Path.GetFileNameWithoutExtension(pdfFiles[0]);
+
+            // Example: 17013222_FILAN_FISTEKU_Contract
+            string pattern = @"^\d+_([A-Z]+)_([A-Z]+)_";
+            Match match = Regex.Match(firstFileName, pattern);
+            string firstName = "Unknown";
+            string lastName = "Unknown";
+
+            if (match.Success && match.Groups.Count == 3)
             {
-                Items = new List<MetadataItem>
+                firstName = match.Groups[1].Value;
+                lastName = match.Groups[2].Value;
+            }
+
+            // Create folder object
+            var folder = new CreateFolderModel
+            {
+                ParentId = "CLNT_PI",
+                Key = "CLNT_PI_" + clientId,
+                Name = clientId,
+                DocumentTypeId = "CLNT",
+                Metadata = new Metadata
                 {
-                    new MetadataItem { DataType = "Text", Key = "CLNTID", Name = "Client ID", Text = "1234567" },
-                    new MetadataItem { DataType = "Text", Key = "NAME", Name = "Name", Text = "Filan" },
-                    new MetadataItem { DataType = "Text", Key = "SRNM", Name = "Surname", Text = "Fisteku" },
-                    new MetadataItem { DataType = "Text", Key = "CLNTTYP", Name = "Client type", Text = "PI" },
-                    new MetadataItem
+                    Items = new List<MetadataItem>
                     {
-                        DataType = "Composite",
-                        Key = "DCMTCDANDTTL",
-                        Name = "Document code and title",
-                        Composite = new CompositeMetadata
+                        new MetadataItem { DataType = "Text", Key = "CLNTID", Name = "Client ID", Text = clientId },
+                        new MetadataItem { DataType = "Text", Key = "NAME", Name = "Name", Text = firstName },
+                        new MetadataItem { DataType = "Text", Key = "SRNM", Name = "Surname", Text = lastName },
+                        new MetadataItem { DataType = "Text", Key = "CLNTTYP", Name = "Client type", Text = "PI" },
+                        new MetadataItem
                         {
-                            Items = new List<CompositeItem>
+                            DataType = "Composite",
+                            Key = "DCMTCDANDTTL",
+                            Name = "Document code and title",
+                            Composite = new CompositeMetadata
                             {
-                                new CompositeItem { DataType = "Text", Key = "CODE", Name = "Code", Text = "3" },
-                                new CompositeItem { DataType = "Text", Key = "TTL", Name = "Title", Text = "Consent for access and processing of personal data" }
+                                Items = new List<CompositeItem>
+                                {
+                                    new CompositeItem { DataType = "Text", Key = "CODE", Name = "Code", Text = "3" },
+                                    new CompositeItem { DataType = "Text", Key = "TTL", Name = "Title", Text = "Consent for access and processing of personal data" }
+                                }
                             }
                         }
                     }
-                }
-            },
-            IsCaseFolder = "true",
-            AllowedDocumentTypes = new[] { "CLNT" },
-            RenameIfExists = "true",
-            OnBehalfOf = "Filan Fisteku",
-            ReasonCode = "VPGL",
-            ReasonBody = "Creating new case folder",
-            ReasonType = "Administration"
-        };
+                },
+                IsCaseFolder = "true",
+                AllowedDocumentTypes = new[] { "CLNT" },
+                RenameIfExists = "true",
+                OnBehalfOf = firstName + " " + lastName,
+                ReasonCode = "VPGL",
+                ReasonBody = "Creating new case folder",
+                ReasonType = "Administration"
+            };
 
-        // Serialize
-        var serializer = new JavaScriptSerializer();
-        string json = serializer.Serialize(folder);
+            var serializer = new JavaScriptSerializer();
+            string json = serializer.Serialize(folder);
 
-        // Send POST
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
-        HttpResponseMessage response = client.PostAsync("/api/casefolder/create", content).Result;
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            HttpResponseMessage response = client.PostAsync("/api/casefolder/create", content).Result;
 
-        if (response.IsSuccessStatusCode)
-        {
-            string respJson = response.Content.ReadAsStringAsync().Result;
-            Console.WriteLine("Folder created successfully:");
-            Console.WriteLine(respJson);
-        }
-        else
-        {
-            Console.WriteLine("Failed to create folder:");
-            Console.WriteLine(response.StatusCode);
-            Console.WriteLine(response.Content.ReadAsStringAsync().Result);
+            if (response.IsSuccessStatusCode)
+            {
+                string respJson = response.Content.ReadAsStringAsync().Result;
+                Console.WriteLine("Folder created for client " + clientId);
+                Console.WriteLine(respJson);
+            }
+            else
+            {
+                Console.WriteLine("Failed for client " + clientId);
+                Console.WriteLine(response.StatusCode);
+                Console.WriteLine(response.Content.ReadAsStringAsync().Result);
+            }
         }
 
         Console.WriteLine("Done.");
