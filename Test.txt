@@ -1,8 +1,9 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -17,29 +18,34 @@ class Program
         ServicePointManager.ServerCertificateValidationCallback = (sender, cert, chain, sslPolicyErrors) => true;
 
         // ------------------- Config -------------------
-        string authUrl = "https://your-indoc-edge-api-url/authenticate"; // Auth service URL
-        string apiBaseUrl = "https://your-indoc-edge-api-url";           // API base URL
+        string authUrl = "https://your-indoc-edge-api-url/authenticate"; // Replace with actual auth service URL
+        string apiBaseUrl = "https://your-indoc-edge-api-url";           // Base URL for API requests
         string username = "YOUR_USERNAME";
         string password = "YOUR_PASSWORD";
-        string clientsRootFolder = @"C:\Clients";                       // Local folder path with client folders
+        string clientsRootFolder = @"C:\Clients";                       // Local path with client folders
 
-        // ------------------- HttpClient with cookie -------------------
+        // ------------------- HttpClient with CookieContainer -------------------
         var handler = new HttpClientHandler();
-        handler.CookieContainer = new CookieContainer(); // store session cookie
-        var client = new HttpClient(handler);
+        handler.CookieContainer = new CookieContainer();
+        HttpClient client = new HttpClient(handler);
 
         // ------------------- Authenticate -------------------
-        var authPayload = "{\"username\":\"" + username + "\",\"password\":\"" + password + "\"}";
-        var authContent = new StringContent(authPayload, Encoding.UTF8, "application/json");
+        var authContent = new FormUrlEncodedContent(new[]
+        {
+            new KeyValuePair<string, string>("username", username),
+            new KeyValuePair<string, string>("password", password)
+        });
 
-        var authResponse = client.PostAsync(authUrl, authContent).Result;
+        HttpResponseMessage authResponse = client.PostAsync(authUrl, authContent).Result;
+
         if (!authResponse.IsSuccessStatusCode)
         {
             Console.WriteLine("Authentication failed: " + authResponse.StatusCode);
             Console.WriteLine(authResponse.Content.ReadAsStringAsync().Result);
             return;
         }
-        Console.WriteLine("Authentication successful.");
+
+        Console.WriteLine("Authentication successful. Session cookie obtained.");
 
         // ------------------- Iterate client folders -------------------
         string[] clientFolders = Directory.GetDirectories(clientsRootFolder);
@@ -92,10 +98,10 @@ class Program
             folderJson += "}";
 
             // ------------------- POST case folder -------------------
-            string folderEndpoint = apiBaseUrl + "/api/casefolder/create"; // replace with correct API endpoint
+            string folderEndpoint = apiBaseUrl + "/api/casefolder/create"; // replace with correct endpoint
             var content = new StringContent(folderJson, Encoding.UTF8, "application/json");
 
-            var response = client.PostAsync(folderEndpoint, content).Result;
+            HttpResponseMessage response = client.PostAsync(folderEndpoint, content).Result;
 
             if (response.IsSuccessStatusCode)
             {
