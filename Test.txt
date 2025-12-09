@@ -1,4 +1,5 @@
 using System;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.IO;
@@ -9,18 +10,38 @@ class Program
 {
     static void Main()
     {
-        string apiUrl = "https://your-api-url";  // replace with your API URL
-        string username = "YOUR_USERNAME";       // replace
-        string password = "YOUR_PASSWORD";       // replace
-        string clientsRootFolder = @"C:\Clients"; // replace with your folder path
+        // Force TLS 1.2
+        ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
 
-        HttpClient client = new HttpClient();
-        client.BaseAddress = new Uri(apiUrl);
+        // Optional: bypass SSL validation for testing only (remove in production)
+        ServicePointManager.ServerCertificateValidationCallback = (sender, cert, chain, sslPolicyErrors) => true;
 
-        // Basic Auth
-        string basicAuth = Convert.ToBase64String(Encoding.ASCII.GetBytes(username + ":" + password));
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", basicAuth);
+        // ------------------- Config -------------------
+        string authUrl = "https://your-indoc-edge-api-url/authenticate"; // Auth service URL
+        string apiBaseUrl = "https://your-indoc-edge-api-url";           // API base URL
+        string username = "YOUR_USERNAME";
+        string password = "YOUR_PASSWORD";
+        string clientsRootFolder = @"C:\Clients";                       // Local folder path with client folders
 
+        // ------------------- HttpClient with cookie -------------------
+        var handler = new HttpClientHandler();
+        handler.CookieContainer = new CookieContainer(); // store session cookie
+        var client = new HttpClient(handler);
+
+        // ------------------- Authenticate -------------------
+        var authPayload = "{\"username\":\"" + username + "\",\"password\":\"" + password + "\"}";
+        var authContent = new StringContent(authPayload, Encoding.UTF8, "application/json");
+
+        var authResponse = client.PostAsync(authUrl, authContent).Result;
+        if (!authResponse.IsSuccessStatusCode)
+        {
+            Console.WriteLine("Authentication failed: " + authResponse.StatusCode);
+            Console.WriteLine(authResponse.Content.ReadAsStringAsync().Result);
+            return;
+        }
+        Console.WriteLine("Authentication successful.");
+
+        // ------------------- Iterate client folders -------------------
         string[] clientFolders = Directory.GetDirectories(clientsRootFolder);
 
         foreach (var folderPath in clientFolders)
@@ -44,41 +65,42 @@ class Program
                 lastName = match.Groups[2].Value;
             }
 
-            // -------------------- Manual JSON --------------------
-            string json = "{";
-            json += "\"ParentId\":\"CLNT_PI\",";
-            json += "\"Key\":\"CLNT_PI_" + clientId + "\",";
-            json += "\"Name\":\"" + clientId + "\",";
-            json += "\"DocumentTypeId\":\"CLNT\",";
-            json += "\"Metadata\":{ \"Items\":[";
-            json += "{\"DataType\":\"Text\",\"Key\":\"CLNTID\",\"Name\":\"Client ID\",\"Text\":\"" + clientId + "\"},";
-            json += "{\"DataType\":\"Text\",\"Key\":\"NAME\",\"Name\":\"Name\",\"Text\":\"" + firstName + "\"},";
-            json += "{\"DataType\":\"Text\",\"Key\":\"SRNM\",\"Name\":\"Surname\",\"Text\":\"" + lastName + "\"},";
-            json += "{\"DataType\":\"Text\",\"Key\":\"CLNTTYP\",\"Name\":\"Client type\",\"Text\":\"PI\"},";
-            json += "{\"DataType\":\"Composite\",\"Key\":\"DCMTCDANDTTL\",\"Name\":\"Document code and title\",";
-            json += "\"Composite\":{\"Items\":[";
-            json += "{\"DataType\":\"Text\",\"Key\":\"CODE\",\"Name\":\"Code\",\"Text\":\"3\"},";
-            json += "{\"DataType\":\"Text\",\"Key\":\"TTL\",\"Name\":\"Title\",\"Text\":\"Consent for access and processing of personal data\"}";
-            json += "]}}";
-            json += "]},"; // end metadata
-            json += "\"IsCaseFolder\":\"true\",";
-            json += "\"AllowedDocumentTypes\":[\"CLNT\"],";
-            json += "\"RenameIfExists\":\"true\",";
-            json += "\"OnBehalfOf\":\"" + firstName + " " + lastName + "\",";
-            json += "\"ReasonCode\":\"VPGL\",";
-            json += "\"ReasonBody\":\"Creating new case folder\",";
-            json += "\"ReasonType\":\"Administration\"";
-            json += "}";
+            // ------------------- Build manual JSON -------------------
+            string folderJson = "{";
+            folderJson += "\"ParentId\":\"CLNT_PI\",";
+            folderJson += "\"Key\":\"CLNT_PI_" + clientId + "\",";
+            folderJson += "\"Name\":\"" + clientId + "\",";
+            folderJson += "\"DocumentTypeId\":\"CLNT\",";
+            folderJson += "\"Metadata\":{\"Items\":[";
+            folderJson += "{\"DataType\":\"Text\",\"Key\":\"CLNTID\",\"Name\":\"Client ID\",\"Text\":\"" + clientId + "\"},";
+            folderJson += "{\"DataType\":\"Text\",\"Key\":\"NAME\",\"Name\":\"Name\",\"Text\":\"" + firstName + "\"},";
+            folderJson += "{\"DataType\":\"Text\",\"Key\":\"SRNM\",\"Name\":\"Surname\",\"Text\":\"" + lastName + "\"},";
+            folderJson += "{\"DataType\":\"Text\",\"Key\":\"CLNTTYP\",\"Name\":\"Client type\",\"Text\":\"PI\"},";
+            folderJson += "{\"DataType\":\"Composite\",\"Key\":\"DCMTCDANDTTL\",\"Name\":\"Document code and title\",";
+            folderJson += "\"Composite\":{\"Items\":[";
+            folderJson += "{\"DataType\":\"Text\",\"Key\":\"CODE\",\"Name\":\"Code\",\"Text\":\"3\"},";
+            folderJson += "{\"DataType\":\"Text\",\"Key\":\"TTL\",\"Name\":\"Title\",\"Text\":\"Consent for access and processing of personal data\"}";
+            folderJson += "]}}";
+            folderJson += "]},"; // end metadata
+            folderJson += "\"IsCaseFolder\":\"true\",";
+            folderJson += "\"AllowedDocumentTypes\":[\"CLNT\"],";
+            folderJson += "\"RenameIfExists\":\"true\",";
+            folderJson += "\"OnBehalfOf\":\"" + firstName + " " + lastName + "\",";
+            folderJson += "\"ReasonCode\":\"VPGL\",";
+            folderJson += "\"ReasonBody\":\"Creating new case folder\",";
+            folderJson += "\"ReasonType\":\"Administration\"";
+            folderJson += "}";
 
-            // -------------------- POST Request --------------------
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
-            HttpResponseMessage response = client.PostAsync("/api/casefolder/create", content).Result;
+            // ------------------- POST case folder -------------------
+            string folderEndpoint = apiBaseUrl + "/api/casefolder/create"; // replace with correct API endpoint
+            var content = new StringContent(folderJson, Encoding.UTF8, "application/json");
+
+            var response = client.PostAsync(folderEndpoint, content).Result;
 
             if (response.IsSuccessStatusCode)
             {
-                string respJson = response.Content.ReadAsStringAsync().Result;
                 Console.WriteLine("Folder created for client " + clientId);
-                Console.WriteLine(respJson);
+                Console.WriteLine(response.Content.ReadAsStringAsync().Result);
             }
             else
             {
