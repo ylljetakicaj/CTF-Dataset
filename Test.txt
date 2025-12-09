@@ -1,0 +1,77 @@
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
+
+public class InDocClient
+{
+    private readonly HttpClient _http;
+
+    public InDocClient(string baseUrl, string username, string password)
+    {
+        _http = new HttpClient();
+        _http.BaseAddress = new Uri(baseUrl);
+
+        var byteArray = Encoding.ASCII.GetBytes($"{username}:{password}");
+        _http.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Basic", Convert.ToBase64String(byteArray));
+    }
+
+    public async Task<string?> CreateCaseFolderAsync(string clientId, string name, string surname)
+    {
+        var body = new
+        {
+            ParentId = "CLNT_PI",
+            Key = $"CLNT_PI_{clientId}",
+            Name = clientId,
+            DocumentTypeId = "CLNT",
+            Metadata = new
+            {
+                Items = new object[]
+                {
+                    new {
+                        DataType = "Text", Key = "CLNTID", Name = "Client ID", Text = clientId
+                    },
+                    new {
+                        DataType = "Text", Key = "NAME", Name = "Name", Text = name
+                    },
+                    new {
+                        DataType = "Text", Key = "SRNM", Name = "Surname", Text = surname
+                    }
+                }
+            },
+            IsCaseFolder = "true",
+            AllowedDocumentTypes = new[] { "CLNT" },
+            RenameIfExists = "true",
+            OnBehalfOf = $"{name} {surname}",
+            ReasonCode = "VPGL",
+            ReasonBody = "Creating new case folder",
+            ReasonType = "Administration"
+        };
+
+        string json = JsonSerializer.Serialize(body);
+        var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+        var response = await _http.PostAsync("/api/casefolder/create", content);
+
+        if (!response.IsSuccessStatusCode)
+            return null;
+
+        var result = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(result);
+
+        return doc.RootElement.GetProperty("Id").GetString();
+    }
+
+    public async Task<bool> UploadDocumentAsync(string caseFolderId, string filePath)
+    {
+        using var form = new MultipartFormDataContent();
+        var bytes = await File.ReadAllBytesAsync(filePath);
+
+        form.Add(new ByteArrayContent(bytes), "file", Path.GetFileName(filePath));
+        form.Add(new StringContent(caseFolderId), "CaseFolderId");
+
+        var response = await _http.PostAsync("/api/documents/upload", form);
+
+        return response.IsSuccessStatusCode;
+    }
+}
