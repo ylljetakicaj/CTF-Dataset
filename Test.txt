@@ -1,11 +1,11 @@
 using System;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Web.Script.Serialization;
 using System.Text;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
+using System.Runtime.Serialization.Json;
 
 // ---------------------- Models ----------------------
 public class CreateFolderModel
@@ -56,43 +56,41 @@ class Program
 {
     static void Main()
     {
-        string baseUrl = "https://your-indoc-edge-api-url"; // replace with real URL
-        string username = "YOUR_USERNAME"; // replace with your username
-        string password = "YOUR_PASSWORD"; // replace with your password
-        string mainFolder = @"C:\Clients"; // folder containing client folders
+        // Environment variables
+        string apiUrl = "https://your-api-url";  // replace
+        string username = "YOUR_USERNAME";       // replace
+        string password = "YOUR_PASSWORD";       // replace
+        string clientsRootFolder = @"C:\Clients"; // replace with your folder path
 
         HttpClient client = new HttpClient();
-        client.BaseAddress = new Uri(baseUrl);
+        client.BaseAddress = new Uri(apiUrl);
 
-        // Basic Authentication
+        // Basic Auth
         string basicAuth = Convert.ToBase64String(Encoding.ASCII.GetBytes(username + ":" + password));
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", basicAuth);
 
-        string[] clientFolders = Directory.GetDirectories(mainFolder);
+        string[] clientFolders = Directory.GetDirectories(clientsRootFolder);
 
-        foreach (string folderPath in clientFolders)
+        foreach (var folderPath in clientFolders)
         {
             string clientId = new DirectoryInfo(folderPath).Name;
 
-            // Assume first PDF file contains name and surname
+            // Get first PDF file for name/surname
             string[] pdfFiles = Directory.GetFiles(folderPath, "*.pdf");
             if (pdfFiles.Length == 0) continue;
 
             string firstFileName = Path.GetFileNameWithoutExtension(pdfFiles[0]);
-
-            // Example: 17013222_FILAN_FISTEKU_Contract
             string pattern = @"^\d+_([A-Z]+)_([A-Z]+)_";
             Match match = Regex.Match(firstFileName, pattern);
             string firstName = "Unknown";
             string lastName = "Unknown";
-
             if (match.Success && match.Groups.Count == 3)
             {
                 firstName = match.Groups[1].Value;
                 lastName = match.Groups[2].Value;
             }
 
-            // Create folder object
+            // Prepare folder object
             var folder = new CreateFolderModel
             {
                 ParentId = "CLNT_PI",
@@ -132,9 +130,20 @@ class Program
                 ReasonType = "Administration"
             };
 
-            var serializer = new JavaScriptSerializer();
-            string json = serializer.Serialize(folder);
+            // Serialize using DataContractJsonSerializer
+            string json;
+            using (var ms = new MemoryStream())
+            {
+                var serializer = new DataContractJsonSerializer(typeof(CreateFolderModel));
+                serializer.WriteObject(ms, folder);
+                ms.Position = 0;
+                using (var sr = new StreamReader(ms))
+                {
+                    json = sr.ReadToEnd();
+                }
+            }
 
+            // Send POST request
             var content = new StringContent(json, Encoding.UTF8, "application/json");
             HttpResponseMessage response = client.PostAsync("/api/casefolder/create", content).Result;
 
@@ -152,6 +161,6 @@ class Program
             }
         }
 
-        Console.WriteLine("Done.");
+        Console.WriteLine("All done.");
     }
 }
