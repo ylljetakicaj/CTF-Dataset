@@ -1,15 +1,15 @@
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using System;
 using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
+using System.Web.Script.Serialization;
 
 public class InDocClient
 {
     private readonly HttpClient _http;
+    private readonly JavaScriptSerializer _serializer = new JavaScriptSerializer();
 
     public InDocClient(string baseUrl, string username, string password)
     {
@@ -46,7 +46,7 @@ public class InDocClient
             ReasonType = "Administration"
         };
 
-        string json = JsonConvert.SerializeObject(body);
+        string json = _serializer.Serialize(body);
         HttpContent content = new StringContent(json, Encoding.UTF8, "application/json");
 
         HttpResponseMessage response = await _http.PostAsync("/api/casefolder/create", content);
@@ -54,10 +54,17 @@ public class InDocClient
         if (!response.IsSuccessStatusCode)
             return null;
 
-        string responseString = await response.Content.ReadAsStringAsync();
-        JObject result = JObject.Parse(responseString);
+        string responseText = await response.Content.ReadAsStringAsync();
 
-        return (string)result["Id"];
+        try
+        {
+            var result = _serializer.Deserialize<dynamic>(responseText);
+            return result["Id"];
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     public async Task<bool> UploadDocumentAsync(string caseFolderId, string filePath)
