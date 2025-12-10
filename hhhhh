@@ -1,0 +1,135 @@
+using System;
+using System.Net;
+using System.Net.Http;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace DmsTest
+{
+    class Program
+    {
+        static readonly string BASE_URL = "https://demo-integration.yourdomain.com/";
+        static readonly string CASE_FOLDER_URL = "https://demo-integration.yourdomain.com/api/casefolder";
+        static readonly string DOCUMENT_URL = "https://demo-integration.yourdomain.com/api/document";
+
+        // Hard-coded cookies for testing
+        static readonly string HARD_CODED_SSID = "PASTE-SS-ID-HERE";
+        static readonly string HARD_CODED_SPID = "PASTE-SS-PID-HERE";
+
+        static void Main(string[] args)
+        {
+            // Force IPv4
+            AppContext.SetSwitch("System.Net.DisableIPv6", true);
+            Console.WriteLine("IPv4 mode enabled.");
+
+            RunAsync().GetAwaiter().GetResult();
+
+            Console.WriteLine("\nFinished.");
+            Console.ReadLine();
+        }
+
+        static async Task RunAsync()
+        {
+            var handler = new HttpClientHandler();
+            handler.UseCookies = true;
+            handler.CookieContainer = new CookieContainer();
+            handler.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
+            handler.ServerCertificateCustomValidationCallback = delegate { return true; };
+
+            // Add cookies BEFORE creating client request
+            handler.CookieContainer.Add(new Uri(BASE_URL), new Cookie("SS-ID", HARD_CODED_SSID));
+            handler.CookieContainer.Add(new Uri(BASE_URL), new Cookie("SS-PID", HARD_CODED_SPID));
+
+            Console.WriteLine("Hardcoded cookies injected:");
+            Console.WriteLine("SS-ID:  " + HARD_CODED_SSID);
+            Console.WriteLine("SS-PID: " + HARD_CODED_SPID);
+
+            HttpClient client = new HttpClient(handler);
+            client.BaseAddress = new Uri(BASE_URL);
+            client.Timeout = TimeSpan.FromSeconds(40);
+
+            //--------------------------------------------------------------------
+            // SEND CASE FOLDER
+            //--------------------------------------------------------------------
+            Console.WriteLine("\nSending case folder...");
+
+            string caseFolderJson = @"{
+              ""ParentId"": ""CLNT_PI"",
+              ""Key"": ""CLNT_PI_1234567"",
+              ""Name"": ""1234567"",
+              ""DocumentTypeId"": ""CLNT"",
+              ""Metadata"": {
+                ""Items"": [
+                  { ""DataType"": ""Text"", ""Key"": ""CLNTID"", ""Name"": ""Client ID"", ""Text"": ""1234567"" },
+                  { ""DataType"": ""Text"", ""Key"": ""NAME"", ""Name"": ""Name"", ""Text"": ""Filan"" },
+                  { ""DataType"": ""Text"", ""Key"": ""SRNM"", ""Name"": ""Surname"", ""Text"": ""Fisteku"" },
+                  { ""DataType"": ""Text"", ""Key"": ""CLNTTYP"", ""Name"": ""Client type"", ""Text"": ""PI"" }
+                ]
+              },
+              ""IsCaseFolder"": ""true"",
+              ""AllowedDocumentTypes"": [ ""CLNT"" ],
+              ""RenameIfExists"": ""true"",
+              ""OnBehalfOf"": ""Filan Fisteku"",
+              ""ReasonCode"": ""VPGL"",
+              ""ReasonBody"": ""Creating new case folder"",
+              ""ReasonType"": ""Administration""
+            }";
+
+            try
+            {
+                StringContent content = new StringContent(caseFolderJson, Encoding.UTF8, "application/json");
+                HttpResponseMessage response = await client.PostAsync(CASE_FOLDER_URL, content);
+
+                Console.WriteLine("Case Folder Status: " + response.StatusCode);
+                Console.WriteLine(await response.Content.ReadAsStringAsync());
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("\nCase Folder ERROR:");
+                Console.WriteLine(ex.Message);
+                if (ex.InnerException != null) Console.WriteLine(ex.InnerException.Message);
+            }
+
+            //--------------------------------------------------------------------
+            // SEND DOCUMENT METADATA ONLY
+            //--------------------------------------------------------------------
+            Console.WriteLine("\nSending document...");
+
+            string documentJson = @"{
+                ""ParentId"": ""DIGPI"",
+                ""Key"": ""12345678-FORMULAR.pdf"",
+                ""Name"": ""FORMULAR"",
+                ""DocumentTypeId"": ""PRDCTRLT"",
+                ""Metadata"": {
+                  ""Items"": [
+                    { ""DataType"": ""Text"", ""Key"": ""CLNTID"", ""Name"": ""Client ID"", ""Text"": ""12345678"" },
+                    { ""DataType"": ""Text"", ""Key"": ""NAME"", ""Name"": ""Name"", ""Text"": ""Arton"" },
+                    { ""DataType"": ""Text"", ""Key"": ""SRNM"", ""Name"": ""Surname"", ""Text"": ""Muja"" },
+                    { ""DataType"": ""Text"", ""Key"": ""CLNTTYP"", ""Name"": ""Client type"", ""Text"": ""PI"" }
+                  ]
+                },
+                ""IsCaseFolder"": ""false"",
+                ""RenameIfExists"": ""true"",
+                ""OnBehalfOf"": ""Arton Muja"",
+                ""ReasonCode"": ""VPGL"",
+                ""ReasonBody"": ""Creating document"",
+                ""ReasonType"": ""Lookup""
+            }";
+
+            try
+            {
+                StringContent content2 = new StringContent(documentJson, Encoding.UTF8, "application/json");
+                HttpResponseMessage response2 = await client.PostAsync(DOCUMENT_URL, content2);
+
+                Console.WriteLine("Document Status: " + response2.StatusCode);
+                Console.WriteLine(await response2.Content.ReadAsStringAsync());
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("\nDocument ERROR:");
+                Console.WriteLine(ex.Message);
+                if (ex.InnerException != null) Console.WriteLine(ex.InnerException.Message);
+            }
+        }
+    }
+}
