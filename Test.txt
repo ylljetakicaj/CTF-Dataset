@@ -2,7 +2,6 @@ using System;
 using System.IO;
 using System.Net;
 using System.Text;
-using System.Web.Script.Serialization;
 
 namespace IndocUploader
 {
@@ -10,6 +9,7 @@ namespace IndocUploader
     {
         static void Main(string[] args)
         {
+            // Required by IndocEdge
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
 
             string apiBase = "https://YOUR-INDOC-EDGE";
@@ -22,23 +22,17 @@ namespace IndocUploader
 
             string rootFolder = @"C:\Docs\1234567";
 
-            // Extract client ID from folder name
             string clientId = new DirectoryInfo(rootFolder).Name;
 
-            // Extract name + surname from first file
             string firstFile = Directory.GetFiles(rootFolder)[0];
             string fileName = Path.GetFileNameWithoutExtension(firstFile);
-
-            // Expected format: ID_NAME_SURNAME_...
             string[] parts = fileName.Split('_');
 
             string name = parts[1];
             string surname = parts[2];
 
-            Console.WriteLine("Client:");
-            Console.WriteLine(clientId + " " + name + " " + surname);
+            Console.WriteLine("Client: " + clientId + " " + name + " " + surname);
 
-            // Authenticate and get session cookie
             string sessionCookie = Authenticate(authUrl, username, password);
 
             if (sessionCookie == null)
@@ -49,150 +43,135 @@ namespace IndocUploader
 
             Console.WriteLine("Auth OK. Cookie: " + sessionCookie);
 
-            // Build Case Folder POST JSON
-            var caseFolderObj = new
-            {
-                ParentId = "CLNT_PI",
-                Key = "CLNT_PI_" + clientId,
-                Name = clientId,
-                DocumentTypeId = "CLNT",
-                Metadata = new
-                {
-                    Items = new object[]
-                    {
-                        new { DataType="Text", Key="CLNTID", Name="Client ID", Text=clientId },
-                        new { DataType="Text", Key="NAME", Name="Name", Text=name },
-                        new { DataType="Text", Key="SRNM", Name="Surname", Text=surname },
-                        new { DataType="Text", Key="CLNTTYP", Name="Client type", Text="PI" },
+            // ---------------------------------------
+            // MANUAL JSON FOR CASE FOLDER
+            // ---------------------------------------
+            string jsonCase =
+                "{ " +
+                "\"ParentId\":\"CLNT_PI\"," +
+                "\"Key\":\"CLNT_PI_" + clientId + "\"," +
+                "\"Name\":\"" + clientId + "\"," +
+                "\"DocumentTypeId\":\"CLNT\"," +
 
-                        new {
-                            DataType="Composite",
-                            Key="DCMTCDANDTTL",
-                            Name="Document code and title",
-                            Composite = new {
-                                Items = new object[]
-                                {
-                                    new { DataType="Text", Key="CODE", Name="Code", Text="3" },
-                                    new { DataType="Text", Key="TTL", Name="Title", Text="Consent for access and processing of personal data" }
-                                }
-                            }
-                        }
-                    }
-                },
-                IsCaseFolder = "true",
-                AllowedDocumentTypes = new string[] { "CLNT" },
-                RenameIfExists = "true",
-                OnBehalfOf = name + " " + surname,
-                ReasonCode = "VPGL",
-                ReasonBody = "Creating new case folder",
-                ReasonType = "Administration"
-            };
+                "\"Metadata\":{" +
+                "\"Items\":[" +
+                    "{ \"DataType\":\"Text\",\"Key\":\"CLNTID\",\"Name\":\"Client ID\",\"Text\":\"" + clientId + "\" }," +
+                    "{ \"DataType\":\"Text\",\"Key\":\"NAME\",\"Name\":\"Name\",\"Text\":\"" + name + "\" }," +
+                    "{ \"DataType\":\"Text\",\"Key\":\"SRNM\",\"Name\":\"Surname\",\"Text\":\"" + surname + "\" }," +
+                    "{ \"DataType\":\"Text\",\"Key\":\"CLNTTYP\",\"Name\":\"Client type\",\"Text\":\"PI\" }," +
 
-            string jsonCase = new JavaScriptSerializer().Serialize(caseFolderObj);
+                    "{ \"DataType\":\"Composite\",\"Key\":\"DCMTCDANDTTL\",\"Name\":\"Document code and title\", " +
+                        "\"Composite\":{ \"Items\":[" +
+                            "{ \"DataType\":\"Text\",\"Key\":\"CODE\",\"Name\":\"Code\",\"Text\":\"3\" }," +
+                            "{ \"DataType\":\"Text\",\"Key\":\"TTL\",\"Name\":\"Title\",\"Text\":\"Consent for access and processing of personal data\" }" +
+                        "] }" +
+                    "}" +
+                "]" +
+                "}," +
 
-            Console.WriteLine("Sending Case Folder...");
-            string result1 = PostJson(caseFolderUrl, jsonCase, sessionCookie);
-            Console.WriteLine("Case Folder Result:");
-            Console.WriteLine(result1);
+                "\"IsCaseFolder\":\"true\"," +
+                "\"AllowedDocumentTypes\":[\"CLNT\"]," +
+                "\"RenameIfExists\":\"true\"," +
+                "\"OnBehalfOf\":\"" + name + " " + surname + "\"," +
+                "\"ReasonCode\":\"VPGL\"," +
+                "\"ReasonBody\":\"Creating new case folder\"," +
+                "\"ReasonType\":\"Administration\"" +
+                "}";
 
-            // Build Document POST JSON
-            var documentObj = new
-            {
-                ParentId = "DIGPI",
-                Key = clientId + "-CONSENT.pdf",
-                Name = "Consent document",
-                ClassificationClassId = "",
-                DocumentTypeId = "PRDCTRLT",
-                Metadata = new
-                {
-                    Items = new object[]
-                    {
-                        new { DataType="Text", Key="CLNTID", Name="Client ID", Text=clientId },
-                        new { DataType="Text", Key="NAME", Name="Name", Text=name },
-                        new { DataType="Text", Key="SRNM", Name="Surname", Text=surname },
-                        new { DataType="Text", Key="CLNTTYP", Name="Client type", Text="PI" },
+            Console.WriteLine("\nSending CASE FOLDER...");
+            string resultCase = PostJson(caseFolderUrl, jsonCase, sessionCookie);
+            Console.WriteLine(resultCase);
 
-                        new {
-                            DataType="Composite",
-                            Key="DCMTCDANDTTL",
-                            Name="Document code and title",
-                            Composite = new {
-                                Items = new object[]
-                                {
-                                    new { DataType="Text", Key="CODE", Name="Code", Text="82" },
-                                    new { DataType="Text", Key="TTL", Name="Title", Text="Standard information form for consumer credit" }
-                                }
-                            }
-                        },
+            // ---------------------------------------
+            // MANUAL JSON FOR DOCUMENT (NO UPLOAD)
+            // ---------------------------------------
+            string jsonDoc =
+                "{ " +
+                "\"ParentId\":\"DIGPI\"," +
+                "\"Key\":\"" + clientId + "-CONSENT.pdf\"," +
+                "\"Name\":\"Consent document\"," +
+                "\"ClassificationClassId\":\"\"," +
+                "\"DocumentTypeId\":\"PRDCTRLT\"," +
 
-                        new { DataType="Text", Key="CNFONTLYLVL", Name="Confidentiality level", Text="Internal" },
-                        new { DataType="Text", Key="STTS", Name="Status", Text="Active" },
-                        new { DataType="Text", Key="CRTDBY", Name="Created by", Text="Viljete Kicaj" }
-                    }
-                },
-                IsCaseFolder = "true",
-                AllowedDocumentTypes = new string[] { "CLNT" },
-                RenameIfExists = "true",
-                OnBehalfOf = name + " " + surname,
-                ReasonCode = "VPGL",
-                ReasonBody = "Creating new case folder",
-                ReasonType = "Lookup"
-            };
+                "\"Metadata\":{" +
+                "\"Items\":[" +
+                    "{ \"DataType\":\"Text\",\"Key\":\"CLNTID\",\"Name\":\"Client ID\",\"Text\":\"" + clientId + "\" }," +
+                    "{ \"DataType\":\"Text\",\"Key\":\"NAME\",\"Name\":\"Name\",\"Text\":\"" + name + "\" }," +
+                    "{ \"DataType\":\"Text\",\"Key\":\"SRNM\",\"Name\":\"Surname\",\"Text\":\"" + surname + "\" }," +
+                    "{ \"DataType\":\"Text\",\"Key\":\"CLNTTYP\",\"Name\":\"Client type\",\"Text\":\"PI\" }," +
 
-            string jsonDoc = new JavaScriptSerializer().Serialize(documentObj);
+                    "{ \"DataType\":\"Composite\",\"Key\":\"DCMTCDANDTTL\",\"Name\":\"Document code and title\", " +
+                        "\"Composite\":{ \"Items\":[" +
+                            "{ \"DataType\":\"Text\",\"Key\":\"CODE\",\"Name\":\"Code\",\"Text\":\"82\" }," +
+                            "{ \"DataType\":\"Text\",\"Key\":\"TTL\",\"Name\":\"Title\",\"Text\":\"Standard information form for consumer credit\" }" +
+                        "] }" +
+                    "}," +
 
-            Console.WriteLine("Sending Document Metadata...");
-            string result2 = PostJson(documentUrl, jsonDoc, sessionCookie);
-            Console.WriteLine("Document Result:");
-            Console.WriteLine(result2);
+                    "{ \"DataType\":\"Text\",\"Key\":\"CNFONTLYLVL\",\"Name\":\"Confidentiality level\",\"Text\":\"Internal\" }," +
+                    "{ \"DataType\":\"Text\",\"Key\":\"STTS\",\"Name\":\"Status\",\"Text\":\"Active\" }," +
+                    "{ \"DataType\":\"Text\",\"Key\":\"CRTDBY\",\"Name\":\"Created by\",\"Text\":\"Viljete Kicaj\" }" +
+                "]" +
+                "}," +
+
+                "\"IsCaseFolder\":\"true\"," +
+                "\"AllowedDocumentTypes\":[\"CLNT\"]," +
+                "\"RenameIfExists\":\"true\"," +
+                "\"OnBehalfOf\":\"" + name + " " + surname + "\"," +
+                "\"ReasonCode\":\"VPGL\"," +
+                "\"ReasonBody\":\"Creating new case folder\"," +
+                "\"ReasonType\":\"Lookup\"" +
+                "}";
+
+            Console.WriteLine("\nSending DOCUMENT...");
+            string resultDoc = PostJson(documentUrl, jsonDoc, sessionCookie);
+            Console.WriteLine(resultDoc);
         }
 
-        // ------------- HELPER METHODS --------------
 
+        // ---------------- AUTH ----------------
         static string Authenticate(string url, string user, string pass)
         {
             try
             {
-                string postData = $"username={user}&password={pass}";
-                byte[] bytes = Encoding.UTF8.GetBytes(postData);
+                string data = "username=" + user + "&password=" + pass;
+                byte[] bytes = Encoding.UTF8.GetBytes(data);
 
-                var req = (HttpWebRequest)WebRequest.Create(url);
+                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
                 req.Method = "POST";
                 req.ContentType = "application/x-www-form-urlencoded";
                 req.ContentLength = bytes.Length;
 
-                using (var stream = req.GetRequestStream())
-                    stream.Write(bytes, 0, bytes.Length);
+                using (var reqStream = req.GetRequestStream())
+                    reqStream.Write(bytes, 0, bytes.Length);
 
-                var resp = (HttpWebResponse)req.GetResponse();
+                HttpWebResponse resp = (HttpWebResponse)req.GetResponse();
 
-                string cookie = resp.Headers["Set-Cookie"];
-                return cookie;
+                return resp.Headers["Set-Cookie"];
             }
             catch (Exception ex)
             {
-                Console.WriteLine("Auth error: " + ex.Message);
+                Console.WriteLine("Auth Error: " + ex.Message);
                 return null;
             }
         }
 
+        // ---------------- POST JSON ----------------
         static string PostJson(string url, string json, string cookie)
         {
             try
             {
                 byte[] bytes = Encoding.UTF8.GetBytes(json);
 
-                var req = (HttpWebRequest)WebRequest.Create(url);
+                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
                 req.Method = "POST";
                 req.ContentType = "application/json";
                 req.Headers.Add("Cookie", cookie);
                 req.ContentLength = bytes.Length;
 
-                using (var stream = req.GetRequestStream())
-                    stream.Write(bytes, 0, bytes.Length);
+                using (var reqStream = req.GetRequestStream())
+                    reqStream.Write(bytes, 0, bytes.Length);
 
-                var resp = (HttpWebResponse)req.GetResponse();
-
+                HttpWebResponse resp = (HttpWebResponse)req.GetResponse();
                 using (var reader = new StreamReader(resp.GetResponseStream()))
                     return reader.ReadToEnd();
             }
