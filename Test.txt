@@ -1,121 +1,205 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Net;
-using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Text;
-using System.Text.RegularExpressions;
+using System.Web.Script.Serialization;
 
-class Program
+namespace IndocUploader
 {
-    static void Main()
+    class Program
     {
-        // Force TLS 1.2
-        ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
-
-        // Optional: bypass SSL validation for testing only (remove in production)
-        ServicePointManager.ServerCertificateValidationCallback = (sender, cert, chain, sslPolicyErrors) => true;
-
-        // ------------------- Config -------------------
-        string authUrl = "https://your-indoc-edge-api-url/authenticate"; // Replace with actual auth service URL
-        string apiBaseUrl = "https://your-indoc-edge-api-url";           // Base URL for API requests
-        string username = "YOUR_USERNAME";
-        string password = "YOUR_PASSWORD";
-        string clientsRootFolder = @"C:\Clients";                       // Local path with client folders
-
-        // ------------------- HttpClient with CookieContainer -------------------
-        var handler = new HttpClientHandler();
-        handler.CookieContainer = new CookieContainer();
-        HttpClient client = new HttpClient(handler);
-
-        // ------------------- Authenticate -------------------
-        var authContent = new FormUrlEncodedContent(new[]
+        static void Main(string[] args)
         {
-            new KeyValuePair<string, string>("username", username),
-            new KeyValuePair<string, string>("password", password)
-        });
+            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
 
-        HttpResponseMessage authResponse = client.PostAsync(authUrl, authContent).Result;
+            string apiBase = "https://YOUR-INDOC-EDGE";
+            string authUrl = apiBase + "/auth/login";
+            string caseFolderUrl = apiBase + "/api/folder/create";
+            string documentUrl = apiBase + "/api/document/create";
 
-        if (!authResponse.IsSuccessStatusCode)
-        {
-            Console.WriteLine("Authentication failed: " + authResponse.StatusCode);
-            Console.WriteLine(authResponse.Content.ReadAsStringAsync().Result);
-            return;
+            string username = "yourUser";
+            string password = "yourPass";
+
+            string rootFolder = @"C:\Docs\1234567";
+
+            // Extract client ID from folder name
+            string clientId = new DirectoryInfo(rootFolder).Name;
+
+            // Extract name + surname from first file
+            string firstFile = Directory.GetFiles(rootFolder)[0];
+            string fileName = Path.GetFileNameWithoutExtension(firstFile);
+
+            // Expected format: ID_NAME_SURNAME_...
+            string[] parts = fileName.Split('_');
+
+            string name = parts[1];
+            string surname = parts[2];
+
+            Console.WriteLine("Client:");
+            Console.WriteLine(clientId + " " + name + " " + surname);
+
+            // Authenticate and get session cookie
+            string sessionCookie = Authenticate(authUrl, username, password);
+
+            if (sessionCookie == null)
+            {
+                Console.WriteLine("Authentication failed.");
+                return;
+            }
+
+            Console.WriteLine("Auth OK. Cookie: " + sessionCookie);
+
+            // Build Case Folder POST JSON
+            var caseFolderObj = new
+            {
+                ParentId = "CLNT_PI",
+                Key = "CLNT_PI_" + clientId,
+                Name = clientId,
+                DocumentTypeId = "CLNT",
+                Metadata = new
+                {
+                    Items = new object[]
+                    {
+                        new { DataType="Text", Key="CLNTID", Name="Client ID", Text=clientId },
+                        new { DataType="Text", Key="NAME", Name="Name", Text=name },
+                        new { DataType="Text", Key="SRNM", Name="Surname", Text=surname },
+                        new { DataType="Text", Key="CLNTTYP", Name="Client type", Text="PI" },
+
+                        new {
+                            DataType="Composite",
+                            Key="DCMTCDANDTTL",
+                            Name="Document code and title",
+                            Composite = new {
+                                Items = new object[]
+                                {
+                                    new { DataType="Text", Key="CODE", Name="Code", Text="3" },
+                                    new { DataType="Text", Key="TTL", Name="Title", Text="Consent for access and processing of personal data" }
+                                }
+                            }
+                        }
+                    }
+                },
+                IsCaseFolder = "true",
+                AllowedDocumentTypes = new string[] { "CLNT" },
+                RenameIfExists = "true",
+                OnBehalfOf = name + " " + surname,
+                ReasonCode = "VPGL",
+                ReasonBody = "Creating new case folder",
+                ReasonType = "Administration"
+            };
+
+            string jsonCase = new JavaScriptSerializer().Serialize(caseFolderObj);
+
+            Console.WriteLine("Sending Case Folder...");
+            string result1 = PostJson(caseFolderUrl, jsonCase, sessionCookie);
+            Console.WriteLine("Case Folder Result:");
+            Console.WriteLine(result1);
+
+            // Build Document POST JSON
+            var documentObj = new
+            {
+                ParentId = "DIGPI",
+                Key = clientId + "-CONSENT.pdf",
+                Name = "Consent document",
+                ClassificationClassId = "",
+                DocumentTypeId = "PRDCTRLT",
+                Metadata = new
+                {
+                    Items = new object[]
+                    {
+                        new { DataType="Text", Key="CLNTID", Name="Client ID", Text=clientId },
+                        new { DataType="Text", Key="NAME", Name="Name", Text=name },
+                        new { DataType="Text", Key="SRNM", Name="Surname", Text=surname },
+                        new { DataType="Text", Key="CLNTTYP", Name="Client type", Text="PI" },
+
+                        new {
+                            DataType="Composite",
+                            Key="DCMTCDANDTTL",
+                            Name="Document code and title",
+                            Composite = new {
+                                Items = new object[]
+                                {
+                                    new { DataType="Text", Key="CODE", Name="Code", Text="82" },
+                                    new { DataType="Text", Key="TTL", Name="Title", Text="Standard information form for consumer credit" }
+                                }
+                            }
+                        },
+
+                        new { DataType="Text", Key="CNFONTLYLVL", Name="Confidentiality level", Text="Internal" },
+                        new { DataType="Text", Key="STTS", Name="Status", Text="Active" },
+                        new { DataType="Text", Key="CRTDBY", Name="Created by", Text="Viljete Kicaj" }
+                    }
+                },
+                IsCaseFolder = "true",
+                AllowedDocumentTypes = new string[] { "CLNT" },
+                RenameIfExists = "true",
+                OnBehalfOf = name + " " + surname,
+                ReasonCode = "VPGL",
+                ReasonBody = "Creating new case folder",
+                ReasonType = "Lookup"
+            };
+
+            string jsonDoc = new JavaScriptSerializer().Serialize(documentObj);
+
+            Console.WriteLine("Sending Document Metadata...");
+            string result2 = PostJson(documentUrl, jsonDoc, sessionCookie);
+            Console.WriteLine("Document Result:");
+            Console.WriteLine(result2);
         }
 
-        Console.WriteLine("Authentication successful. Session cookie obtained.");
+        // ------------- HELPER METHODS --------------
 
-        // ------------------- Iterate client folders -------------------
-        string[] clientFolders = Directory.GetDirectories(clientsRootFolder);
-
-        foreach (var folderPath in clientFolders)
+        static string Authenticate(string url, string user, string pass)
         {
-            string clientId = new DirectoryInfo(folderPath).Name;
-
-            // Get first PDF file for name/surname
-            string[] pdfFiles = Directory.GetFiles(folderPath, "*.pdf");
-            if (pdfFiles.Length == 0) continue;
-
-            string firstFileName = Path.GetFileNameWithoutExtension(pdfFiles[0]);
-
-            // Example filename: 17013222_FILAN_FISTEKU_Contract
-            string pattern = @"^\d+_([A-Z]+)_([A-Z]+)_";
-            Match match = Regex.Match(firstFileName, pattern);
-            string firstName = "Unknown";
-            string lastName = "Unknown";
-            if (match.Success && match.Groups.Count == 3)
+            try
             {
-                firstName = match.Groups[1].Value;
-                lastName = match.Groups[2].Value;
+                string postData = $"username={user}&password={pass}";
+                byte[] bytes = Encoding.UTF8.GetBytes(postData);
+
+                var req = (HttpWebRequest)WebRequest.Create(url);
+                req.Method = "POST";
+                req.ContentType = "application/x-www-form-urlencoded";
+                req.ContentLength = bytes.Length;
+
+                using (var stream = req.GetRequestStream())
+                    stream.Write(bytes, 0, bytes.Length);
+
+                var resp = (HttpWebResponse)req.GetResponse();
+
+                string cookie = resp.Headers["Set-Cookie"];
+                return cookie;
             }
-
-            // ------------------- Build manual JSON -------------------
-            string folderJson = "{";
-            folderJson += "\"ParentId\":\"CLNT_PI\",";
-            folderJson += "\"Key\":\"CLNT_PI_" + clientId + "\",";
-            folderJson += "\"Name\":\"" + clientId + "\",";
-            folderJson += "\"DocumentTypeId\":\"CLNT\",";
-            folderJson += "\"Metadata\":{\"Items\":[";
-            folderJson += "{\"DataType\":\"Text\",\"Key\":\"CLNTID\",\"Name\":\"Client ID\",\"Text\":\"" + clientId + "\"},";
-            folderJson += "{\"DataType\":\"Text\",\"Key\":\"NAME\",\"Name\":\"Name\",\"Text\":\"" + firstName + "\"},";
-            folderJson += "{\"DataType\":\"Text\",\"Key\":\"SRNM\",\"Name\":\"Surname\",\"Text\":\"" + lastName + "\"},";
-            folderJson += "{\"DataType\":\"Text\",\"Key\":\"CLNTTYP\",\"Name\":\"Client type\",\"Text\":\"PI\"},";
-            folderJson += "{\"DataType\":\"Composite\",\"Key\":\"DCMTCDANDTTL\",\"Name\":\"Document code and title\",";
-            folderJson += "\"Composite\":{\"Items\":[";
-            folderJson += "{\"DataType\":\"Text\",\"Key\":\"CODE\",\"Name\":\"Code\",\"Text\":\"3\"},";
-            folderJson += "{\"DataType\":\"Text\",\"Key\":\"TTL\",\"Name\":\"Title\",\"Text\":\"Consent for access and processing of personal data\"}";
-            folderJson += "]}}";
-            folderJson += "]},"; // end metadata
-            folderJson += "\"IsCaseFolder\":\"true\",";
-            folderJson += "\"AllowedDocumentTypes\":[\"CLNT\"],";
-            folderJson += "\"RenameIfExists\":\"true\",";
-            folderJson += "\"OnBehalfOf\":\"" + firstName + " " + lastName + "\",";
-            folderJson += "\"ReasonCode\":\"VPGL\",";
-            folderJson += "\"ReasonBody\":\"Creating new case folder\",";
-            folderJson += "\"ReasonType\":\"Administration\"";
-            folderJson += "}";
-
-            // ------------------- POST case folder -------------------
-            string folderEndpoint = apiBaseUrl + "/api/casefolder/create"; // replace with correct endpoint
-            var content = new StringContent(folderJson, Encoding.UTF8, "application/json");
-
-            HttpResponseMessage response = client.PostAsync(folderEndpoint, content).Result;
-
-            if (response.IsSuccessStatusCode)
+            catch (Exception ex)
             {
-                Console.WriteLine("Folder created for client " + clientId);
-                Console.WriteLine(response.Content.ReadAsStringAsync().Result);
-            }
-            else
-            {
-                Console.WriteLine("Failed for client " + clientId);
-                Console.WriteLine(response.StatusCode);
-                Console.WriteLine(response.Content.ReadAsStringAsync().Result);
+                Console.WriteLine("Auth error: " + ex.Message);
+                return null;
             }
         }
 
-        Console.WriteLine("All done.");
+        static string PostJson(string url, string json, string cookie)
+        {
+            try
+            {
+                byte[] bytes = Encoding.UTF8.GetBytes(json);
+
+                var req = (HttpWebRequest)WebRequest.Create(url);
+                req.Method = "POST";
+                req.ContentType = "application/json";
+                req.Headers.Add("Cookie", cookie);
+                req.ContentLength = bytes.Length;
+
+                using (var stream = req.GetRequestStream())
+                    stream.Write(bytes, 0, bytes.Length);
+
+                var resp = (HttpWebResponse)req.GetResponse();
+
+                using (var reader = new StreamReader(resp.GetResponseStream()))
+                    return reader.ReadToEnd();
+            }
+            catch (Exception ex)
+            {
+                return "Error: " + ex.Message;
+            }
+        }
     }
 }
